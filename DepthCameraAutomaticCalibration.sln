@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Kinect_Test_1", "Kinect_Test_1\Kinect_Test_1.vcxproj", "{FDF2DB7B-F8AE-4434-B0C8-487D3A850CF8}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FDF2DB7B-F8AE-4434-B0C8-487D3A850CF8}.Debug|Win32.ActiveCfg = Debug|Win32
+		{FDF2DB7B-F8AE-4434-B0C8-487D3A850CF8}.Debug|Win32.Build.0 = Debug|Win32
+		{FDF2DB7B-F8AE-4434-B0C8-487D3A850CF8}.Release|Win32.ActiveCfg = Release|Win32
+		{FDF2DB7B-F8AE-4434-B0C8-487D3A850CF8}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
