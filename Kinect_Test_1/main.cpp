@@ -9,6 +9,10 @@
 #include <NuiImageCamera.h>
 #include <NuiSensor.h>
 
+#include <assert.h>
+#include <float.h>
+#include <math.h>
+
 // ----------------------------------------------------------
 // Global Variables
 // ----------------------------------------------------------
@@ -20,6 +24,7 @@ namespace
 
 double rotate_y=0; 
 double rotate_x=0;
+double toggleNormal = 0;
 
 // Kinect variables
 HANDLE depthStream;				// The indetifier of the Kinect's Depth Camera
@@ -52,7 +57,14 @@ void specialKeys( int key, int x, int y )
 		case GLUT_KEY_DOWN: rotate_x -= 5;
 			break;
 
-		default: // Undefined key
+		case GLUT_KEY_F1:
+			if (toggleNormal == 1) 
+				toggleNormal = 0; 
+			else 
+				toggleNormal = 1;
+			break;
+
+		default: 
 			break;
 	}
  
@@ -141,7 +153,7 @@ void drawKinectPointCloud()
 	glRotatef( rotate_y, 0.0, 1.0, 0.0 );
 
 	// Scale all the coordinates: for visualisation purposes
-	glScalef( 0.2, 0.2, 0.2 );        
+	glScalef(0.2, 0.2, 0.2);        
 
 	// Get the points data from the Kinect
 	USHORT data[width*height];  // array containing the depth information of each pixel
@@ -149,18 +161,90 @@ void drawKinectPointCloud()
 
 	// Display the points as a 3D point cloud
 	glBegin(GL_POINTS);
-		glColor3f(   1.0,  0.0,  0.0 );
+		glColor3f(1.0, 0.0, 0.0);
 
 		for (int y = 0; y < height; ++y)
 		{
 			USHORT *line = data + y * width;
 			for (int x = 0; x < width; ++x)
 			{
-				Vector4 pointToDisplay = NuiTransformDepthImageToSkeleton(x,y, line[x]);
+				Vector4 pointToDisplay = NuiTransformDepthImageToSkeleton(x, y, line[x]);
 				glVertex3f(pointToDisplay.x, pointToDisplay.y, pointToDisplay.z);
 			}
 		}
 	glEnd();
+
+	// Toggle variable that allows to have a button that controls the display of the normal vectors
+	if (toggleNormal == 1)
+	{
+		// Normal estimation: try to find 4 connected neighbours and estimate the normal based on them
+		for (int y = 0; y < height; y+=4)
+		{
+			USHORT *line = data + y * width;
+			for (int x = 0; x < width; x+=4)
+			{
+				// Verify that all the neighbours are within bounds
+				if ((x-1 >= 0) && (x+1 <= width) && (y-1 >= 0) && (y+1 <= height))
+				{
+					Vector4 pointOfInterest = NuiTransformDepthImageToSkeleton(x, y, line[x]);
+					Vector4 nLeft = NuiTransformDepthImageToSkeleton(x-1, y, line[x-1]);
+					Vector4 nRight = NuiTransformDepthImageToSkeleton(x+1, y, line[x+1]);
+					Vector4 nUp = NuiTransformDepthImageToSkeleton(x, y-1, line[x - width]);
+					Vector4 nDown = NuiTransformDepthImageToSkeleton(x, y+1, line[x + width]);
+
+					// We must verify that all the neighbours have depth information
+					// This is verified by having a depth different from 0
+					if ((nLeft.z != 0) && (nRight.z != 0) && (nUp.z != 0) && (nDown.z != 0) && (pointOfInterest.z != 0)) 
+					{
+						// We must verify that the neighbours have similar depth, with a specific delta (e.g. delta = 10)
+						int delta = 10;
+
+						if ((abs(line[x-1]-line[x]) < delta) && (abs(line[x+1]-line[x]) < delta) && 
+							(abs(line[x-width]-line[x]) < delta) && (abs(line[x+width]-line[x]) < delta))
+						{
+							// Vector nLeft-nRight
+							float a1, a2, a3;
+							a1 = nLeft.x - nRight.x;
+							a2 = nLeft.y - nRight.y;
+							a3 = nLeft.z - nRight.z;
+
+							// Vector nUp-nDown
+							float b1, b2, b3;
+							b1 = nUp.x - nDown.x;
+							b2 = nUp.y - nDown.y;
+							b3 = nUp.z - nDown.z;
+
+							// Compute the cross product between the 2 vectors to get the normal vector
+							float c1, c2, c3;
+							c1 = a2 * b3 - a3 * b2;
+							c2 = a3 * b1 - a1 * b3;
+							c3 = a1 * b2 - a2 * b1;
+
+							// Normalisation of vector c
+							float normC = sqrt(c1 * c1 + c2 * c2 + c3 * c3);
+
+							c1 = c1/normC;
+							c2 = c2/normC;
+							c3 = c3/normC;
+
+							assert(_finite(c1));
+							assert(_finite(c2));
+							assert(_finite(c3));
+
+							// s is a scaling factor. 
+							// The parameters c1, c2 and c3 have very small values that are not visible when visualising. 
+							long s = 1;
+							glBegin(GL_LINES);
+								glColor3f(0.0, 1.0, 0.0);
+								glVertex3f(pointOfInterest.x, pointOfInterest.y, pointOfInterest.z);
+								glVertex3f(pointOfInterest.x + s*c1, pointOfInterest.y + s*c2, pointOfInterest.z + s*c3);
+							glEnd();
+						}
+					}
+				}
+			}
+		}
+	}
 
 	glFlush();
 	glutSwapBuffers();
