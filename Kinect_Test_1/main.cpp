@@ -109,18 +109,16 @@ void getKinectData(USHORT * dest)
     NUI_IMAGE_FRAME imageFrame;
     NUI_LOCKED_RECT LockedRect;
     if (sensor->NuiImageStreamGetNextFrame(depthStream, 0, &imageFrame) < 0) return;
-    INuiFrameTexture* texture = imageFrame.pFrameTexture;
+    INuiFrameTexture *texture = imageFrame.pFrameTexture;
     texture->LockRect(0, &LockedRect, NULL, 0);
     if (LockedRect.Pitch != 0)
     {
 		const USHORT *curr = (const USHORT*) LockedRect.pBits;
-        const USHORT* dataEnd = curr + (width*height);
+        const USHORT *dataEnd = curr + (width*height);
 
         while (curr < dataEnd) 
 		{
-            // Get depth in millimeters
-            USHORT depth = NuiDepthPixelToDepth(*curr++);
-			*dest++ = depth;
+			*dest++ = *curr++;
         }
     }
     texture->UnlockRect(0);
@@ -142,11 +140,11 @@ void drawKinectPointCloud()
 	glRotatef( rotate_x, 1.0, 0.0, 0.0 );
 	glRotatef( rotate_y, 0.0, 1.0, 0.0 );
 
-	// Scale all the coordinates
-	glScalef( 2, 2, 2 );        
+	// Scale all the coordinates: for visualisation purposes
+	glScalef( 0.2, 0.2, 0.2 );        
 
 	// Get the points data from the Kinect
-	USHORT data[width*height];  // BGRA array containing the texture data
+	USHORT data[width*height];  // array containing the depth information of each pixel
 	getKinectData(data);
 
 	// Display the points as a 3D point cloud
