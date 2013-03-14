@@ -14,9 +14,8 @@
 // ----------------------------------------------------------
 namespace
 {
-	const int width = 640;
-	const int height = 480;
-}
+const int width = 640;
+const int height = 480;
 
 double rotate_y=0; 
 double rotate_x=0;
@@ -113,13 +112,7 @@ void getKinectData(USHORT * dest)
     texture->LockRect(0, &LockedRect, NULL, 0);
     if (LockedRect.Pitch != 0)
     {
-		const USHORT *curr = (const USHORT*) LockedRect.pBits;
-        const USHORT *dataEnd = curr + (width*height);
-
-        while (curr < dataEnd) 
-		{
-			*dest++ = *curr++;
-        }
+		memcpy(dest, LockedRect.pBits, width*height*sizeof(USHORT));
     }
     texture->UnlockRect(0);
     sensor->NuiImageStreamReleaseFrame(depthStream, &imageFrame);
@@ -173,6 +166,8 @@ void draw()
 {
 	drawKinectPointCloud();
 }
+
+} // namespace
 
 int main(int argc, char* argv[]) 
 {
