@@ -12,14 +12,14 @@
 // ----------------------------------------------------------
 // Global Variables
 // ----------------------------------------------------------
-#define width 640
-#define height 480
+namespace
+{
+	const int width = 640;
+	const int height = 480;
+}
 
 double rotate_y=0; 
 double rotate_x=0;
-
-// OpenGL Variables
-USHORT data[width*height];  // BGRA array containing the texture data
 
 // Kinect variables
 HANDLE depthStream;				// The indetifier of the Kinect's Depth Camera
@@ -38,22 +38,26 @@ void specialKeys();
 // ----------------------------------------------------------
 void specialKeys( int key, int x, int y ) 
 { 
-  //  Right arrow - increase rotation by 5 degree
-  if (key == GLUT_KEY_RIGHT)
-    rotate_y += 5;
+	switch (key)
+	{
+		case GLUT_KEY_RIGHT: rotate_y += 5;
+			break;
+
+		case GLUT_KEY_LEFT: rotate_y -= 5;
+			break; 
+
+		case GLUT_KEY_UP: rotate_x += 5;
+			break;
+
+		case GLUT_KEY_DOWN: rotate_x -= 5;
+			break;
+
+		default: // Undefined key
+			break;
+	}
  
-  //  Left arrow - decrease rotation by 5 degree
-  else if (key == GLUT_KEY_LEFT)
-    rotate_y -= 5;
- 
-  else if (key == GLUT_KEY_UP)
-    rotate_x += 5;
- 
-  else if (key == GLUT_KEY_DOWN)
-    rotate_x -= 5;
- 
-  //  Request display update
-  glutPostRedisplay(); 
+	//  Request display update
+	glutPostRedisplay(); 
 }
 
 // ----------------------------------------------------------
@@ -100,7 +104,7 @@ bool initKinect()
 // ----------------------------------------------------------
 // Get data from the Kinect
 // ----------------------------------------------------------
-void getKinectData(USHORT* dest) 
+void getKinectData(USHORT * dest) 
 {
     NUI_IMAGE_FRAME imageFrame;
     NUI_LOCKED_RECT LockedRect;
@@ -109,14 +113,13 @@ void getKinectData(USHORT* dest)
     texture->LockRect(0, &LockedRect, NULL, 0);
     if (LockedRect.Pitch != 0)
     {
-		const USHORT* curr = (const USHORT*) LockedRect.pBits;
+		const USHORT *curr = (const USHORT*) LockedRect.pBits;
         const USHORT* dataEnd = curr + (width*height);
 
         while (curr < dataEnd) 
 		{
             // Get depth in millimeters
             USHORT depth = NuiDepthPixelToDepth(*curr++);
-
 			*dest++ = depth;
         }
     }
@@ -143,15 +146,21 @@ void drawKinectPointCloud()
 	glScalef( 2, 2, 2 );        
 
 	// Get the points data from the Kinect
+	USHORT data[width*height];  // BGRA array containing the texture data
 	getKinectData(data);
 
 	// Display the points as a 3D point cloud
 	glBegin(GL_POINTS);
 		glColor3f(   1.0,  0.0,  0.0 );
-		for (int i=0; i< width*height; i++)
+
+		for (int y = 0; y < height; ++y)
 		{
-			Vector4 pointToDisplay = NuiTransformDepthImageToSkeleton(i/width, i%width, data[i]);
-			glVertex3f(pointToDisplay.x, pointToDisplay.y, pointToDisplay.z);
+			USHORT *line = data + y * width;
+			for (int x = 0; x < width; ++x)
+			{
+				Vector4 pointToDisplay = NuiTransformDepthImageToSkeleton(x,y, line[x]);
+				glVertex3f(pointToDisplay.x, pointToDisplay.y, pointToDisplay.z);
+			}
 		}
 	glEnd();
 
