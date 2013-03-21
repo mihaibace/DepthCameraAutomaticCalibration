@@ -12,6 +12,7 @@
 #include <assert.h>
 #include <float.h>
 #include <math.h>
+#include <stdio.h>
 
 // ----------------------------------------------------------
 // Global Variables
@@ -21,9 +22,12 @@ namespace
 const int width = 640;
 const int height = 480;
 
-double rotate_y=0; 
-double rotate_x=0;
 double toggleNormal = 0;
+double rotate_y = 0; 
+double rotate_x = 0;
+double trans_x = 0;
+double trans_y = 0;
+double trans_z = 0;
 
 // Kinect variables
 HANDLE depthStream;				// The indetifier of the Kinect's Depth Camera
@@ -36,6 +40,7 @@ INuiSensor* sensor;            // The kinect sensor
 void draw(void);
 void display();
 void specialKeys();
+void keyboard();
 
 // ----------------------------------------------------------
 // OpenGL scene control
@@ -56,19 +61,75 @@ void specialKeys( int key, int x, int y )
 		case GLUT_KEY_DOWN: rotate_x -= 5;
 			break;
 
-		case GLUT_KEY_F1:
-			if (toggleNormal == 1) 
-				toggleNormal = 0; 
-			else 
-				toggleNormal = 1;
-			break;
-
 		default: 
 			break;
 	}
  
 	//  Request display update
 	glutPostRedisplay(); 
+}
+
+void keyboard(unsigned char key, int x, int y)
+{
+	GLdouble modelViewMatrix[16];
+	glGetDoublev(GL_MODELVIEW_MATRIX, modelViewMatrix); 
+
+	// x-axis: m0, m1, m2
+	// y-axis: m4, m5, m6
+	// z-axis: m8, m9, m10
+
+	int scalingFactor = 1;
+
+	switch(key)
+	{
+	case 'a': // Y Axis
+			trans_x += modelViewMatrix[0] * scalingFactor;
+			trans_y += modelViewMatrix[1] * scalingFactor;
+			trans_z += modelViewMatrix[2] * scalingFactor;
+		break;
+
+	case 'd': 
+			trans_x -= modelViewMatrix[0] * scalingFactor;
+			trans_y -= modelViewMatrix[1] * scalingFactor;
+			trans_z -= modelViewMatrix[2] * scalingFactor;
+		break;
+
+	case 'w': // X Axis
+			trans_x -= modelViewMatrix[4] * scalingFactor;
+			trans_y -= modelViewMatrix[5] * scalingFactor;
+			trans_z -= modelViewMatrix[6] * scalingFactor;
+		break;
+
+	case 's': 
+			trans_x += modelViewMatrix[4] * scalingFactor;
+			trans_y += modelViewMatrix[5] * scalingFactor;
+			trans_z += modelViewMatrix[6] * scalingFactor;
+		break;
+
+	case 'z': // Z Axis
+			trans_x -= modelViewMatrix[8] * scalingFactor;
+			trans_y -= modelViewMatrix[9] * scalingFactor;
+			trans_z -= modelViewMatrix[10] * scalingFactor;
+		break;
+
+	case 'x': 
+			trans_x += modelViewMatrix[8] * scalingFactor;
+			trans_y += modelViewMatrix[9] * scalingFactor;
+			trans_z += modelViewMatrix[10] * scalingFactor;
+		break;
+
+	case 't': 
+			if (toggleNormal == 1) 
+				toggleNormal = 0; 
+			else 
+				toggleNormal = 1;
+		break;
+
+	default:
+		break;
+	}
+
+	glutPostRedisplay();
 }
 
 // ----------------------------------------------------------
@@ -83,6 +144,7 @@ bool init(int argc, char* argv[])
 	glutDisplayFunc(draw);
     glutIdleFunc(draw);
 	glutSpecialFunc(specialKeys);
+	glutKeyboardFunc(keyboard);
 
 	return true;
 }
@@ -139,14 +201,18 @@ void drawKinectPointCloud()
 	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 
 	// Reset transformations
+	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
  
 	// Rotate when user changes rotate_x and rotate_y
 	glRotatef( rotate_x, 1.0, 0.0, 0.0 );
 	glRotatef( rotate_y, 0.0, 1.0, 0.0 );
 
+	// Translate the image
+	glTranslatef(-trans_x, -trans_y, -trans_z);
+	
 	// Scale all the coordinates: for visualisation purposes
-	glScalef(0.2, 0.2, 0.2);        
+	glScalef(0.2, 0.2, 0.2);       
 
 	// Get the points data from the Kinect
 	USHORT data[width*height];  // array containing the depth information of each pixel
@@ -249,6 +315,20 @@ void drawKinectPointCloud()
 void draw() 
 {
 	drawKinectPointCloud();
+	glPushMatrix();
+	glScalef(1000, 1000, 1000);
+	glBegin(GL_LINES);
+	glColor3f(1,0,0);
+	glVertex3f(0,0,0);
+	glVertex3f(1,0,0);
+	glColor3f(0,1,0);
+	glVertex3f(0,0,0);
+	glVertex3f(0,1,0);
+	glColor3f(0,0,1);
+	glVertex3f(0,0,0);
+	glVertex3f(0,0,1);
+	glEnd();
+	glPopMatrix();
 }
 
 } // namespace
