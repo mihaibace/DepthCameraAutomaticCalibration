@@ -14,6 +14,12 @@
 #include <math.h>
 #include <stdio.h>
 
+#include <opencv2/imgproc/imgproc.hpp>  // Gaussian Blur
+#include <opencv2/core/core.hpp>        // Basic OpenCV structures (cv::Mat, Scalar)
+#include <opencv2/highgui/highgui.hpp>  // OpenCV window I/O
+
+using namespace cv;
+
 // ----------------------------------------------------------
 // Global Variables
 // ----------------------------------------------------------
@@ -22,7 +28,8 @@ namespace
 const int width = 640;
 const int height = 480;
 
-double toggleNormal = 0;
+int toggleNormal = 0;
+int saveImage = 0;
 double rotate_y = 0; 
 double rotate_x = 0;
 double trans_x = 0;
@@ -31,8 +38,10 @@ double trans_z = 0;
 
 // Kinect variables
 HANDLE depthStream;				// The indetifier of the Kinect's Depth Camera
-INuiSensor* sensor;            // The kinect sensor
+HANDLE rgbStream;				// The identifier of the Kinect's RGB Camera
+INuiSensor * sensor;            // The kinect sensor
 
+GLubyte rgbData[width*height*4];
 
 // ----------------------------------------------------------
 // Function Prototypes
@@ -125,6 +134,9 @@ void keyboard(unsigned char key, int x, int y)
 				toggleNormal = 1;
 		break;
 
+	case 'p': saveImage = 1;
+		break;
+
 	default:
 		break;
 	}
@@ -145,6 +157,7 @@ bool init(int argc, char* argv[])
     glutIdleFunc(draw);
 	glutSpecialFunc(specialKeys);
 	glutKeyboardFunc(keyboard);
+	
 
 	return true;
 }
@@ -161,7 +174,7 @@ bool initKinect()
 
     // Initialize sensor
     sensor->NuiInitialize(NUI_INITIALIZE_FLAG_USES_DEPTH | NUI_INITIALIZE_FLAG_USES_COLOR);
-
+	
 	// Set the camera as a Depth Camera
 	sensor-> NuiImageStreamOpen(
 		NUI_IMAGE_TYPE_DEPTH, // Depth camera
@@ -171,13 +184,23 @@ bool initKinect()
 		NULL, // Event handle
 		&depthStream);
 
+	// Set the camera as a RGB Camera
+	sensor-> NuiImageStreamOpen(
+		NUI_IMAGE_TYPE_COLOR, // Depth camera
+		NUI_IMAGE_RESOLUTION_640x480, // Image resolution
+		0, // Image stream flags, e.g. near mode
+		2, // Number of frames to buffer
+		NULL, // Event handle
+		&rgbStream);
+
+
     return sensor;
 }
 
 // ----------------------------------------------------------
 // Get data from the Kinect
 // ----------------------------------------------------------
-void getKinectData(USHORT * dest) 
+void getKinectDepthData(USHORT * dest) 
 {
     NUI_IMAGE_FRAME imageFrame;
     NUI_LOCKED_RECT LockedRect;
@@ -188,13 +211,300 @@ void getKinectData(USHORT * dest)
     {
 		memcpy(dest, LockedRect.pBits, width*height*sizeof(USHORT));
     }
+	
+	//if (LockedRect.Pitch != 0)
+	//{
+	//	const USHORT* curr = (const USHORT*) LockedRect.pBits;
+ //       const USHORT* dataEnd = curr + (width*height);
+
+ //       while (curr < dataEnd) 
+	//	{
+ //           // Get depth in millimeters
+ //           USHORT depth = NuiDepthPixelToDepth(*curr++);
+ //           *dest++ = depth;
+ //       }
+	//}
+
     texture->UnlockRect(0);
     sensor->NuiImageStreamReleaseFrame(depthStream, &imageFrame);
 }
 
+
+NUI_IMAGE_FRAME imageRGBFrame;
+void getKinectRGBData(GLubyte* dest) 
+{
+    
+    NUI_LOCKED_RECT LockedRect;
+    if (sensor->NuiImageStreamGetNextFrame(rgbStream, 0, &imageRGBFrame) < 0) return;
+    INuiFrameTexture* texture = imageRGBFrame.pFrameTexture;
+    texture->LockRect(0, &LockedRect, NULL, 0);
+    if (LockedRect.Pitch != 0)
+    {
+		memcpy(dest, LockedRect.pBits, width*height*4*sizeof(GLubyte));
+    }
+    texture->UnlockRect(0);
+    sensor->NuiImageStreamReleaseFrame(rgbStream, &imageRGBFrame);
+}
+
+
 // ----------------------------------------------------------
 // Draw Kinect data
 // ----------------------------------------------------------
+
+cv::Mat getRGB_GaussianBlurDifference(GLubyte * rgbData) 
+{
+    getKinectRGBData(rgbData);
+
+	cv::Mat rgbImage(height, width, CV_8UC4, rgbData);
+	//cv::imshow("RGB: Original Image", rgbImage);
+
+	cv::Mat grayImage(height, width, CV_8UC1);
+	cvtColor(rgbImage, grayImage, CV_RGB2GRAY);
+	//cv::imshow("RGB: Grayscale Image", grayImage);
+
+	cv::Mat gray_float1, gray_float2;
+	grayImage.convertTo(gray_float1, CV_32FC1);
+
+	cv::Mat b, c, d, result, result2;
+	cv::GaussianBlur(gray_float1, b, cv::Size(21,21), 0, 0, 4);
+	cv::GaussianBlur(b, c, cv::Size(21,21), 0, 0, 4);
+	cv::GaussianBlur(c, d, cv::Size(21,21), 0, 0, 4);
+	result = d - c;
+
+	double min_val, max_val;
+	cv::minMaxLoc(result, &min_val, &max_val);
+	//result.convertTo(result2, CV_8UC1, 255.0/max_val);
+	//result.convertTo(result2, CV_8UC1, 10);
+
+	return result;
+}
+
+// Try to remove all the saturated pixels (white, value = 255)
+cv::Mat filterDepthSaturatedPixels(cv::Mat matInput)
+{
+	double min_val, max_val;
+	cv::Mat result = matInput.clone();
+
+	cv::minMaxLoc(matInput, &min_val, &max_val);
+
+	for (int y=0; y<matInput.rows; ++y)
+	{
+		for (int x=0; x<matInput.cols; ++x)
+		{
+			int value = (int) matInput.at<uchar>(y, x);
+			if (value == max_val)
+			{
+				result.at<uchar>(y, x) = 0;
+			}
+			else
+			{
+				result.at<uchar>(y,x) = matInput.at<uchar>(y, x);
+			}
+		}
+	}
+
+	return result;
+}
+
+// Compute the difference between succesive Gaussian filters on the depth image
+cv::Mat getDepth_GaussianBlurDifference(USHORT * data)
+{
+	// OpenCV blurring
+	cv::Mat a(height, width, CV_16SC1, data);
+	cv::Mat a_float, a_float2;
+	a.convertTo(a_float, CV_32FC1);
+	cv::Mat b, c, d, result;
+	cv::GaussianBlur(a_float, b, cv::Size(21,21), 0, 0, 4);
+	cv::GaussianBlur(b, c, cv::Size(21,21), 0, 0, 4);
+	cv::GaussianBlur(c, d, cv::Size(21,21), 0, 0, 4);
+	result = d - c;
+
+	cv::Mat scaled_result;
+	double min_val, max_val;
+	cv::minMaxLoc(result, &min_val, &max_val);
+	result.convertTo(scaled_result, CV_8UC1, 10);
+	//result.convertTo(scaled_result, CV_8UC1, 255.0/max_val);
+	
+	return scaled_result;
+}	
+
+void getGradientMagnitudeAndOrientation(cv::Mat matInput, cv::Mat * gradient_mag, cv::Mat * gradient_orientation)
+{
+	// Compute the gradient of the image
+	Mat gradX, gradY, abs_gradX, abs_gradY, gradient, approx_gradient, abs_gradient;
+
+	// Gradient on X direction
+	Sobel(matInput, gradX, CV_16S, 1, 0, 3, 1, 0, 4);
+	convertScaleAbs(gradX, abs_gradX);
+
+	// Gradient on Y direction
+	Sobel(matInput, gradY, CV_16S, 0, 1, 3, 1, 0, 4);
+	convertScaleAbs(gradY, abs_gradY);
+
+	// Total gradient
+	Mat magnitude, abs_magnitude, scaled_orientation, orientation, abs_orientation, abs_gradX_f, abs_gradY_f;
+	abs_gradX.convertTo(abs_gradX_f, CV_32FC1);
+	abs_gradY.convertTo(abs_gradY_f, CV_32FC1);
+	cartToPolar(abs_gradX_f, abs_gradY_f, magnitude, orientation, true);
+
+	// Display gradient
+	convertScaleAbs(magnitude, abs_magnitude);
+
+	//convertScaleAbs(orientation, abs_orientation);
+	orientation.convertTo(scaled_orientation, CV_8UC1, 255.0/360);
+
+	*gradient_mag = abs_magnitude.clone();
+	*gradient_orientation = scaled_orientation.clone();
+}
+
+/*
+void heatmap()
+{
+	// Try to display a color map of the gradient orientation
+	//IplImage *img = cvLoadImage(argv[1],CV_LOAD_IMAGE_GRAYSCALE); //the input image, grayscale
+	Mat heatmap; //the heatmap image, color
+	resize(imread("colors.jpg",CV_LOAD_IMAGE_COLOR), heatmap, Size(1,256));
+	Mat dst(scaled_orientation.size(), CV_8UC3); //the result image, color
+
+	Mat scaled_orientation3(scaled_orientation.size(), CV_8UC3);
+	int from_to[] = {0,0, 0,1, 0,2};
+	mixChannels(&scaled_orientation, 1, &scaled_orientation3, 1, from_to, 3);
+	LUT(scaled_orientation3, heatmap.col(0), dst);
+
+	//cv::namedWindow("Blur_difference_gradient_orientation_heatmap", CV_WINDOW_AUTOSIZE );
+	cv::Mat heat_map(dst);
+	//cv::imshow("Blur_difference_gradient_orientation_heatmap", heat_map);
+	//cvSaveImage("false_colors.bmp",dst);
+}
+*/
+
+cv::Mat findLocalMaximCorrelation(cv::Mat depthImage, cv::Mat rgbImage)
+{
+	cv::Mat result = depthImage.clone();
+
+	double depth_min_val, depth_max_val, rgb_min_val, rgb_max_val;
+
+	cv::minMaxLoc(depthImage, &depth_min_val, &depth_max_val);
+	cv::minMaxLoc(rgbImage, &rgb_min_val, &rgb_max_val);
+
+	for (int y=0; y<depthImage.rows; ++y)
+	{
+		for (int x=0; x<depthImage.cols; ++x)
+		{
+			int depthValue = (int) depthImage.at<uchar>(y, x);
+			float rgbValue = rgbImage.at<float>(y, x);
+			if (depthValue == ((int) depth_max_val) && rgbValue == ((float) rgb_max_val))
+			{
+				result.at<uchar>(y, x) = depthImage.at<uchar>(y, x);
+			}
+			else
+			{
+				result.at<uchar>(y,x) = 0;
+			}
+		}
+	}
+
+	return result;
+}
+
+// Recontruct the depth image from the color image
+cv::Mat getDepthColorReconstruction(cv::Mat depthImage, cv::Mat rgbImage, USHORT * data)
+{
+		cv::Mat coloredDepth(depthImage.size(), CV_8UC4);
+	assert(coloredDepth.channels() == 4);
+
+	for (int y=0; y<coloredDepth.rows; ++y)
+	{
+		for (int x=0; x<coloredDepth.cols; ++x)
+		{
+			long x_col, y_col;
+			USHORT pixelDepth = data[y*width+x];
+			
+			if (pixelDepth != 0)
+			{
+				// FOR THIS FUNCTION TO WORK - USE PACKED VERSION OF THE DEPTH
+				NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, x, y, pixelDepth, &x_col, &y_col);
+				//NuiImageGetColorPixelCoordinatesFromDepthPixel(NUI_IMAGE_RESOLUTION_640x480, NULL, x, y, pixelDepth, &x_col, &y_col); - NOT WORKING WELL, NEED TO USE THE ONE ABOVE
+
+				if ((x_col >= 0 && x_col < width) && (y_col >= 0 && y_col < height))
+				{
+					// take the color from x_col and y_col and project it in the depth image
+				
+					// iterate through all the channels
+					for (int c = 0; c < 4; ++c) 
+					{
+						coloredDepth.ptr<uchar>(y)[x * 4 + c] = rgbImage.ptr<uchar>(y_col)[x_col * 4 + c]; 
+						//coloredDepth.data[coloredDepth.channels()*(coloredDepth.cols*y + x) + c] = rgbImage.data[rgbImage.channels()*(rgbImage.cols*y_col + x_col) + c];
+					}
+				}
+				else
+				{
+					for (int c = 0; c < 4; ++c) 
+					{
+						coloredDepth.ptr<uchar>(y)[x * 4 + c] = 0; 
+						//coloredDepth.data[coloredDepth.channels()*(coloredDepth.cols*y + x) + c] = 0;
+					}
+				}
+			}
+			else
+			{
+				// We have no depth information about this points (depth from kinect = 0)
+				for (int c = 0; c < 4; ++c) 
+				{
+					coloredDepth.ptr<uchar>(y)[x * 4 + c] = 255; 
+					//coloredDepth.data[coloredDepth.channels()*(coloredDepth.cols*y + x) + c] = 0;
+				}
+			}
+		}
+	}
+
+	return coloredDepth;
+}
+
+void depthTemplateMatching(cv::Mat depthDifImage)
+{
+	// create a copy of the depth image
+	cv::Mat depth_copy;
+	depthDifImage.copyTo(depth_copy);
+
+	cv::Mat templIN = imread("template.jpg", 0); // 0 means grayscale image; 1 would take as 3 channel colour image 
+	cv::Mat templ;
+	templIN.convertTo(templ, CV_8UC1);
+
+	// convert depth image to be of the same type
+	depthDifImage.convertTo(depth_copy, CV_8UC1);
+
+	int result_cols = depth_copy.cols - templ.cols + 1;
+	int result_rows = depth_copy.cols - templ.rows + 1;
+	cv::Mat result;
+	result.create(result_rows, result_cols, CV_8UC1);
+
+	// 0 = 8U, 1 = 8S, 2 = 16U, 3 = 16S, 4 = 32S, 5 = 32F, 6 = 64F
+	int t1 = templ.type();
+	int t2 = depth_copy.type();
+
+	// match template only accepts images of type 8U or 32F
+	matchTemplate(depth_copy, templ, result, CV_TM_CCOEFF_NORMED);
+
+	//normalize( result, result, 0, 1, NORM_MINMAX, -1, Mat());
+
+	double minVal, maxVal;
+	Point minLoc, maxLoc, matchLoc;
+
+	minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc, Mat()); 
+
+	// since we are using CV_TM_COEFF_NORMED -> max value is the one we are looking for
+	matchLoc = maxLoc;
+
+	rectangle( depth_copy, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(255), 2, 8, 0 );
+	rectangle( result, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(255), 2, 8, 0 );
+
+	imshow("Image window", depth_copy);
+	imshow("Result", result);
+
+	//imshow("Template", templ);
+}
+
 void drawKinectPointCloud()
 {
 	//  Clear screen and Z-buffer
@@ -212,26 +522,108 @@ void drawKinectPointCloud()
 	glTranslatef(-trans_x, -trans_y, -trans_z);
 	
 	// Scale all the coordinates: for visualisation purposes
-	glScalef(0.2, 0.2, 0.2);       
+	glScalef(1.5, 1.5, 1.5);     
 
-	// Get the points data from the Kinect
 	USHORT data[width*height];  // array containing the depth information of each pixel
-	getKinectData(data);
+	// Get Kinect Depth data
+	getKinectDepthData(data);
+
+	// Get Kinect RGB data
+	getKinectRGBData(rgbData);
+
+	// Show original RGB image
+	cv::Mat rgbImage(height, width, CV_8UC4, rgbData);
+	//cv::imshow("RGB: Original Image", rgbImage);
+	//cv::Mat grayImage(height, width, CV_8UC1);
+
 
 	// Display the points as a 3D point cloud
 	glBegin(GL_POINTS);
-		glColor3f(1.0, 0.0, 0.0);
-
 		for (int y = 0; y < height; ++y)
 		{
 			USHORT *line = data + y * width;
 			for (int x = 0; x < width; ++x)
 			{
-				Vector4 pointToDisplay = NuiTransformDepthImageToSkeleton(x, y, line[x]);
-				glVertex3f(pointToDisplay.x, pointToDisplay.y, pointToDisplay.z);
+				// Packed pixel depth
+				USHORT pixelDepth = line[x];
+				// Unpack pixel to get the depth in MM
+				USHORT depthInMM = NuiDepthPixelToDepth(line[x]);
+
+				// Get 3D coordinates from Depth Image Space
+				Vector4 pointToDisplay = NuiTransformDepthImageToSkeleton(x, y, depthInMM);
+
+				long x_col, y_col;
+				if (pixelDepth != 0)
+				{
+					NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, x, y, pixelDepth, &x_col, &y_col);
+
+					if ((x_col >= 0 && x_col < width) && (y_col >= 0 && y_col < height))
+					{
+						// take the color from x_col and y_col and project it in the depth image
+						int blue = (int) rgbImage.ptr<uchar>(y_col)[x_col * 4 + 0]; 
+						int green = (int) rgbImage.ptr<uchar>(y_col)[x_col * 4 + 1]; 
+						int red = (int) rgbImage.ptr<uchar>(y_col)[x_col * 4 + 2]; 
+						// Vertex Color
+						glPushMatrix();
+							glColor3f((float)red/255.0, (float)green/255.0, (float)blue/255.0);
+							glVertex3f(pointToDisplay.x, pointToDisplay.y, pointToDisplay.z);
+						glPopMatrix();
+					}
+				}				
 			}
 		}
 	glEnd();
+
+	
+	// Show original depth image
+	double min, max;
+	cv::Mat depthImage(height,width, CV_16SC1, data);
+	cv::minMaxLoc(depthImage,&min, &max);
+	Mat scaled_depth;
+	depthImage.convertTo(scaled_depth, CV_8UC1, 255.0/max);
+	//cv::imshow("Depth: Original Image", scaled_depth);
+
+	cv::Mat coloredDepth = getDepthColorReconstruction(depthImage, rgbImage, data);
+
+	//imshow("Depth: Colored from RGB", coloredDepth);
+	//imshow("RGB: Original image", rgbImage);
+
+	cv::Mat depthDif = getDepth_GaussianBlurDifference(data);
+	imshow("Depth: Gaussian Blur Difference", depthDif);
+	
+	cv::Mat gradMag, gradOrient;
+	getGradientMagnitudeAndOrientation(depthDif, &gradMag, &gradOrient);
+	//imshow("Depth: Gradient Magnitude", gradMag);
+	//imshow("Depth: Gradient Orientation", gradOrient);
+
+	cv::Mat rgbDif = getRGB_GaussianBlurDifference(rgbData);
+	imshow("RGB: Gaussian Blur Difference", rgbDif);
+	
+	if (saveImage == 1)
+	{
+		imwrite("depth_image.jpg", depthDif);
+		saveImage = 0;
+	}
+
+	depthTemplateMatching(depthDif);
+
+
+	//cv::Mat filtered_depthDif = filterDepthSaturatedPixels(depthDif);
+	//imshow("Depth: Filtered Gaussian Blur Difference", filtered_depthDif);
+
+	//cv::Mat localMaximaCorrelation = findLocalMaximCorrelation(depthDif, rgbDif);
+	//imshow("Correlation result", localMaximaCorrelation);
+	
+	/*
+	// Save the images to file
+	if (saveImage == 1)
+	{
+		imwrite("Blur_difference.jpg", scaled_result);
+		imwrite("Blur_difference_gradient_magnitude.jpg", abs_magnitude);
+		imwrite("Blur_difference_gradient_orientation.jpg", scaled_orientation);
+		saveImage = 0;
+	}
+	*/
 
 	// Toggle variable that allows to have a button that controls the display of the normal vectors
 	if (toggleNormal == 1)
@@ -315,23 +707,10 @@ void drawKinectPointCloud()
 void draw() 
 {
 	drawKinectPointCloud();
-	glPushMatrix();
-	glScalef(1000, 1000, 1000);
-	glBegin(GL_LINES);
-	glColor3f(1,0,0);
-	glVertex3f(0,0,0);
-	glVertex3f(1,0,0);
-	glColor3f(0,1,0);
-	glVertex3f(0,0,0);
-	glVertex3f(0,1,0);
-	glColor3f(0,0,1);
-	glVertex3f(0,0,0);
-	glVertex3f(0,0,1);
-	glEnd();
-	glPopMatrix();
 }
 
 } // namespace
+
 
 int main(int argc, char* argv[]) 
 {
