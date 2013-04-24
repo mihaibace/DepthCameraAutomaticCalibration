@@ -712,19 +712,24 @@ void drawKinectPointCloud()
 	if (toggleNormal == 1)
 	{
 		// Normal estimation: try to find 4 connected neighbours and estimate the normal based on them
-		for (int y = 0; y < height; y+=4)
+		for (int y = 0; y < height; y+=10)
 		{
 			USHORT *line = data + y * width;
-			for (int x = 0; x < width; x+=4)
+			for (int x = 0; x < width; x+=10)
 			{
 				// Verify that all the neighbours are within bounds
 				if ((x-1 >= 0) && (x+1 <= width) && (y-1 >= 0) && (y+1 <= height))
 				{
-					Vector4 pointOfInterest = NuiTransformDepthImageToSkeleton(x, y, line[x]);
-					Vector4 nLeft = NuiTransformDepthImageToSkeleton(x-1, y, line[x-1]);
-					Vector4 nRight = NuiTransformDepthImageToSkeleton(x+1, y, line[x+1]);
-					Vector4 nUp = NuiTransformDepthImageToSkeleton(x, y-1, line[x - width]);
-					Vector4 nDown = NuiTransformDepthImageToSkeleton(x, y+1, line[x + width]);
+					// Packed pixel depth
+					USHORT pixelDepth = line[x];
+					// Unpack pixel to get the depth in MM
+					USHORT depthInMM = NuiDepthPixelToDepth(line[x]);
+					
+					Vector4 pointOfInterest = NuiTransformDepthImageToSkeleton(x, y, depthInMM);
+					Vector4 nLeft = NuiTransformDepthImageToSkeleton(x-1, y, NuiDepthPixelToDepth(line[x-1]));
+					Vector4 nRight = NuiTransformDepthImageToSkeleton(x+1, y, NuiDepthPixelToDepth(line[x+1]));
+					Vector4 nUp = NuiTransformDepthImageToSkeleton(x, y-1, NuiDepthPixelToDepth(line[x-width]));
+					Vector4 nDown = NuiTransformDepthImageToSkeleton(x, y+1, NuiDepthPixelToDepth(line[x+width]));
 
 					// We must verify that all the neighbours have depth information
 					// This is verified by having a depth different from 0
