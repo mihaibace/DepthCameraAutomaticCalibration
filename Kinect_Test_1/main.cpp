@@ -273,10 +273,11 @@ cv::Mat getRGB_GaussianBlurDifference(GLubyte * rgbData)
 
 	double min_val, max_val;
 	cv::minMaxLoc(result, &min_val, &max_val);
-	//result.convertTo(result2, CV_8UC1, 255.0/max_val);
+	result.convertTo(result2, CV_8UC1, 255.0/max_val);
 	//result.convertTo(result2, CV_8UC1, 10);
 
-	return result;
+	// Result 2 is returned as CV_8UC1
+	return result2;
 }
 
 // Try to remove all the saturated pixels (white, value = 255)
@@ -461,13 +462,13 @@ cv::Mat getDepthColorReconstruction(cv::Mat depthImage, cv::Mat rgbImage, USHORT
 	return coloredDepth;
 }
 
-void depthTemplateMatching(cv::Mat depthDifImage)
+Point depthTemplateMatching(cv::Mat depthDifImage)
 {
 	// create a copy of the depth image
 	cv::Mat depth_copy;
 	depthDifImage.copyTo(depth_copy);
 
-	cv::Mat templIN = imread("template.jpg", 0); // 0 means grayscale image; 1 would take as 3 channel colour image 
+	cv::Mat templIN = imread("depth_template.jpg", 0); // 0 means grayscale image; 1 would take as 3 channel colour image 
 	cv::Mat templ;
 	templIN.convertTo(templ, CV_8UC1);
 
@@ -479,12 +480,12 @@ void depthTemplateMatching(cv::Mat depthDifImage)
 	cv::Mat result;
 	result.create(result_rows, result_cols, CV_8UC1);
 
-	// 0 = 8U, 1 = 8S, 2 = 16U, 3 = 16S, 4 = 32S, 5 = 32F, 6 = 64F
-	int t1 = templ.type();
-	int t2 = depth_copy.type();
+	// type - 0 = 8U, 1 = 8S, 2 = 16U, 3 = 16S, 4 = 32S, 5 = 32F, 6 = 64F
+	assert(templ.type() == depth_copy.type() || templ.depth() == depth_copy.depth());
 
 	// match template only accepts images of type 8U or 32F
 	matchTemplate(depth_copy, templ, result, CV_TM_CCOEFF_NORMED);
+
 
 	//normalize( result, result, 0, 1, NORM_MINMAX, -1, Mat());
 
@@ -497,12 +498,88 @@ void depthTemplateMatching(cv::Mat depthDifImage)
 	matchLoc = maxLoc;
 
 	rectangle( depth_copy, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(255), 2, 8, 0 );
-	rectangle( result, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(255), 2, 8, 0 );
+	line(result, Point(matchLoc.x - 20, matchLoc.y), Point(matchLoc.x + 20, matchLoc.y), Scalar::all(1), 1, 8, 0);
+	line(result, Point(matchLoc.x, matchLoc.y - 20), Point(matchLoc.x, matchLoc.y + 20), Scalar::all(1), 1, 8, 0);
 
-	imshow("Image window", depth_copy);
-	imshow("Result", result);
+	cv::Mat result_conv;
+	double min, max;
+	minMaxLoc(result, &min, &max);
+	result.convertTo(result_conv, CV_8UC1, 255.0/max);
 
-	//imshow("Template", templ);
+	imshow("Depth image matching", depth_copy);
+	//imshow("Depth matching result", result);
+
+	if (saveImage == 1)
+	{
+		imwrite("template_match.jpg", result_conv);
+		imwrite("depth_dif_match.jpg", depth_copy);
+		saveImage = 0;
+	}
+
+	Point depthMatchPoint;
+	depthMatchPoint.x = matchLoc.x + templ.cols/2;
+	depthMatchPoint.y = matchLoc.y + templ.rows/2;
+	return depthMatchPoint;
+}
+
+Point rgbTemplateMatching(cv::Mat rgbDifImage)
+{
+	// create a copy of the rgb image
+	cv::Mat rgb_copy;
+	rgbDifImage.copyTo(rgb_copy);
+
+	cv::Mat templIN = imread("rgb_template.jpg", 0); // 0 means grayscale image; 1 would take as 3 channel colour image 
+	cv::Mat templ;
+	templIN.convertTo(templ, CV_8UC1);
+
+	// convert depth image to be of the same type
+	rgbDifImage.convertTo(rgb_copy, CV_8UC1);
+
+	int result_cols = rgb_copy.cols - templ.cols + 1;
+	int result_rows = rgb_copy.cols - templ.rows + 1;
+	cv::Mat result;
+	result.create(result_rows, result_cols, CV_8UC1);
+
+	// 0 = 8U, 1 = 8S, 2 = 16U, 3 = 16S, 4 = 32S, 5 = 32F, 6 = 64F
+	assert(templIN.type() == rgb_copy.type() || templIN.depth() == rgb_copy.depth());
+	
+	// match template only accepts images of type 8U or 32F
+	matchTemplate(rgb_copy, templ, result, CV_TM_CCOEFF_NORMED);
+
+	//normalize( result, result, 0, 1, NORM_MINMAX, -1, Mat());
+
+	double minVal, maxVal;
+	Point minLoc, maxLoc, matchLoc;
+
+	minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc, Mat()); 
+
+	// since we are using CV_TM_COEFF_NORMED -> max value is the one we are looking for
+	matchLoc = maxLoc;
+
+	rectangle( rgb_copy, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(255), 2, 8, 0 );
+	line(result, Point(matchLoc.x - 20, matchLoc.y), Point(matchLoc.x + 20, matchLoc.y), Scalar::all(1), 1, 8, 0);
+	line(result, Point(matchLoc.x, matchLoc.y - 20), Point(matchLoc.x, matchLoc.y + 20), Scalar::all(1), 1, 8, 0);
+
+	cv::Mat result_conv;
+	double min, max;
+	minMaxLoc(result, &min, &max);
+	result.convertTo(result_conv, CV_8UC1, 255.0/max);
+
+	imshow("RGB image matching", rgb_copy);
+	//imshow("Result", result);
+
+	/*if (saveImage == 1)
+	{
+		imwrite("rgb_template_match.jpg", result_conv);
+		imwrite("rgb_dif_match.jpg", rgb_copy);
+		saveImage = 0;
+	}*/
+
+	// Return the position of the matched point
+	Point rgbMatchPoint;
+	rgbMatchPoint.x = matchLoc.x + templ.cols/2;
+	rgbMatchPoint.y = matchLoc.y + templ.rows/2;
+	return rgbMatchPoint;
 }
 
 void drawKinectPointCloud()
@@ -589,7 +666,7 @@ void drawKinectPointCloud()
 	//imshow("RGB: Original image", rgbImage);
 
 	cv::Mat depthDif = getDepth_GaussianBlurDifference(data);
-	imshow("Depth: Gaussian Blur Difference", depthDif);
+	//imshow("Depth: Gaussian Blur Difference", depthDif);
 	
 	cv::Mat gradMag, gradOrient;
 	getGradientMagnitudeAndOrientation(depthDif, &gradMag, &gradOrient);
@@ -597,15 +674,21 @@ void drawKinectPointCloud()
 	//imshow("Depth: Gradient Orientation", gradOrient);
 
 	cv::Mat rgbDif = getRGB_GaussianBlurDifference(rgbData);
-	imshow("RGB: Gaussian Blur Difference", rgbDif);
-	
-	if (saveImage == 1)
+	//imshow("RGB: Gaussian Blur Difference", rgbDif);
+
+	Point depthMatchLoc = depthTemplateMatching(depthDif);
+	Point rgbMatchLoc = rgbTemplateMatching(rgbDif);
+	long rgbX, rgbY;
+	USHORT matchDepth = data[depthMatchLoc.y*width+depthMatchLoc.x];
+	NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, depthMatchLoc.x, depthMatchLoc.y, matchDepth, &rgbX, &rgbY);
+
+	if (abs(rgbX - rgbMatchLoc.x) < 10 && abs(rgbY - rgbMatchLoc.y) < 10)
 	{
-		imwrite("depth_image.jpg", depthDif);
-		saveImage = 0;
+			line(rgbImage, Point(rgbMatchLoc.x - 20, rgbMatchLoc.y), Point(rgbMatchLoc.x + 20, rgbMatchLoc.y), Scalar(0,0,255), 2, 8, 0); // image is BGRA
+			line(rgbImage, Point(rgbMatchLoc.x, rgbMatchLoc.y - 20), Point(rgbMatchLoc.x, rgbMatchLoc.y + 20), Scalar(0,0,255), 2, 8, 0);
 	}
 
-	depthTemplateMatching(depthDif);
+	imshow("Final Matching", rgbImage);
 
 
 	//cv::Mat filtered_depthDif = filterDepthSaturatedPixels(depthDif);
