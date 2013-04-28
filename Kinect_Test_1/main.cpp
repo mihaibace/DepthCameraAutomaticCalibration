@@ -18,7 +18,10 @@
 #include <opencv2/core/core.hpp>        // Basic OpenCV structures (cv::Mat, Scalar)
 #include <opencv2/highgui/highgui.hpp>  // OpenCV window I/O
 
+#include <vector>
+
 using namespace cv;
+using namespace std;
 
 // ----------------------------------------------------------
 // Global Variables
@@ -35,6 +38,9 @@ double rotate_x = 0;
 double trans_x = 0;
 double trans_y = 0;
 double trans_z = 0;
+
+// Vector holding the calibration points
+vector<cv::Point> calibPoints;
 
 // Kinect variables
 HANDLE depthStream;				// The indetifier of the Kinect's Depth Camera
@@ -149,6 +155,10 @@ void keyboard(unsigned char key, int x, int y)
 // ----------------------------------------------------------
 bool init(int argc, char* argv[]) 
 {
+	// Vector for calibration points init
+	calibPoints.reserve(1000);
+
+	// OpenGL init
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA);
     glutInitWindowSize(width,height);
@@ -658,7 +668,7 @@ void drawKinectPointCloud()
 	cv::minMaxLoc(depthImage,&min, &max);
 	Mat scaled_depth;
 	depthImage.convertTo(scaled_depth, CV_8UC1, 255.0/max);
-	//cv::imshow("Depth: Original Image", scaled_depth);
+	cv::imshow("Depth: Original Image", scaled_depth);
 
 	cv::Mat coloredDepth = getDepthColorReconstruction(depthImage, rgbImage, data);
 
@@ -674,6 +684,9 @@ void drawKinectPointCloud()
 	//imshow("Depth: Gradient Orientation", gradOrient);
 
 	cv::Mat rgbDif = getRGB_GaussianBlurDifference(rgbData);
+
+
+
 	//imshow("RGB: Gaussian Blur Difference", rgbDif);
 
 	Point depthMatchLoc = depthTemplateMatching(depthDif);
@@ -682,11 +695,25 @@ void drawKinectPointCloud()
 	USHORT matchDepth = data[depthMatchLoc.y*width+depthMatchLoc.x];
 	NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, depthMatchLoc.x, depthMatchLoc.y, matchDepth, &rgbX, &rgbY);
 
+
+	// Add matched point to array
 	if (abs(rgbX - rgbMatchLoc.x) < 10 && abs(rgbY - rgbMatchLoc.y) < 10)
 	{
-			line(rgbImage, Point(rgbMatchLoc.x - 20, rgbMatchLoc.y), Point(rgbMatchLoc.x + 20, rgbMatchLoc.y), Scalar(0,0,255), 2, 8, 0); // image is BGRA
-			line(rgbImage, Point(rgbMatchLoc.x, rgbMatchLoc.y - 20), Point(rgbMatchLoc.x, rgbMatchLoc.y + 20), Scalar(0,0,255), 2, 8, 0);
+		calibPoints.push_back(rgbMatchLoc);
 	}
+
+	// iterate thorugh all the points and display them
+	for (int i=0; i < calibPoints.size(); i++)
+	{
+		line(rgbImage, Point(calibPoints[i].x - 20, calibPoints[i].y), Point(calibPoints[i].x + 20, calibPoints[i].y), Scalar(0,0,255), 2, 8, 0); // image is BGRA
+		line(rgbImage, Point(calibPoints[i].x, calibPoints[i].y - 20), Point(calibPoints[i].x, calibPoints[i].y + 20), Scalar(0,0,255), 2, 8, 0); 
+	}
+
+	//if (abs(rgbX - rgbMatchLoc.x) < 10 && abs(rgbY - rgbMatchLoc.y) < 10)
+	//{
+	//		line(rgbImage, Point(rgbMatchLoc.x - 20, rgbMatchLoc.y), Point(rgbMatchLoc.x + 20, rgbMatchLoc.y), Scalar(0,0,255), 2, 8, 0); // image is BGRA
+	//		line(rgbImage, Point(rgbMatchLoc.x, rgbMatchLoc.y - 20), Point(rgbMatchLoc.x, rgbMatchLoc.y + 20), Scalar(0,0,255), 2, 8, 0);
+	//}
 
 	imshow("Final Matching", rgbImage);
 
