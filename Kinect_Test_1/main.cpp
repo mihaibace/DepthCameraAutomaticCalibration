@@ -578,7 +578,7 @@ Point rgbTemplateMatching(cv::Mat rgbDifImage)
 	minMaxLoc(result, &min, &max);
 	result.convertTo(result_conv, CV_8UC1, 255.0/max);
 
-	imshow("RGB image matching", rgb_copy);
+	//imshow("RGB image matching", rgb_copy);
 	//imshow("Result", result);
 
 	/*if (saveImage == 1)
@@ -605,20 +605,23 @@ void showCameraByIndex()
     {
 		IplImage* iplImg = cvQueryFrame(capture);
 		frame = iplImg;
+		imshow("result", frame);
+		
+		/*
 		if(!frame.empty())
 		{
 			if(waitKey( 10 ) >= 0)
 				cvReleaseCapture(&capture);
 
-			imshow("result", frame);
+			
 			//waitKey(0);
-		}
+		}*/
 	}
 }
 
 void drawKinectPointCloud()
 {
-	//showCameraByIndex();
+	showCameraByIndex();
 
 	//  Clear screen and Z-buffer
 	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
@@ -652,10 +655,10 @@ void drawKinectPointCloud()
 
 	// Display the points as a 3D point cloud
 	glBegin(GL_POINTS);
-		for (int y = 0; y < height; ++y)
+		for (int y = 0; y < height; y+=2)
 		{
 			USHORT *line = data + y * width;
-			for (int x = 0; x < width; ++x)
+			for (int x = 0; x < width; x+=2)
 			{
 				// Packed pixel depth
 				USHORT pixelDepth = line[x];
@@ -676,11 +679,10 @@ void drawKinectPointCloud()
 						int blue = (int) rgbImage.ptr<uchar>(y_col)[x_col * 4 + 0]; 
 						int green = (int) rgbImage.ptr<uchar>(y_col)[x_col * 4 + 1]; 
 						int red = (int) rgbImage.ptr<uchar>(y_col)[x_col * 4 + 2]; 
+						
 						// Vertex Color
-						glPushMatrix();
-							glColor3f((float)red/255.0, (float)green/255.0, (float)blue/255.0);
-							glVertex3f(pointToDisplay.x, pointToDisplay.y, pointToDisplay.z);
-						glPopMatrix();
+						glColor3f((float)red/255.0, (float)green/255.0, (float)blue/255.0);
+						glVertex3f(pointToDisplay.x, pointToDisplay.y, pointToDisplay.z);
 					}
 				}				
 			}
@@ -694,7 +696,7 @@ void drawKinectPointCloud()
 	cv::minMaxLoc(depthImage,&min, &max);
 	Mat scaled_depth;
 	depthImage.convertTo(scaled_depth, CV_8UC1, 255.0/max);
-	cv::imshow("Depth: Original Image", scaled_depth);
+	//cv::imshow("Depth: Original Image", scaled_depth);
 
 	cv::Mat coloredDepth = getDepthColorReconstruction(depthImage, rgbImage, data);
 
@@ -755,6 +757,8 @@ void drawKinectPointCloud()
 
 	//cv::Mat localMaximaCorrelation = findLocalMaximCorrelation(depthDif, rgbDif);
 	//imshow("Correlation result", localMaximaCorrelation);
+
+	
 	
 	/*
 	// Save the images to file
@@ -843,6 +847,7 @@ void drawKinectPointCloud()
 			}
 		}
 	}
+
 
 	glFlush();
 	glutSwapBuffers();
