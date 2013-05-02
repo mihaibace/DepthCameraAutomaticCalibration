@@ -49,6 +49,9 @@ INuiSensor * sensor;            // The kinect sensor
 
 GLubyte rgbData[width*height*4];
 
+// Webcam variables
+CvCapture* capture;
+
 // ----------------------------------------------------------
 // Function Prototypes
 // ----------------------------------------------------------
@@ -478,7 +481,7 @@ Point depthTemplateMatching(cv::Mat depthDifImage)
 	cv::Mat depth_copy;
 	depthDifImage.copyTo(depth_copy);
 
-	cv::Mat templIN = imread("depth_template.jpg", 0); // 0 means grayscale image; 1 would take as 3 channel colour image 
+	cv::Mat templIN = imread("depth_template_3.jpg", 0); // 0 means grayscale image; 1 would take as 3 channel colour image 
 	cv::Mat templ;
 	templIN.convertTo(templ, CV_8UC1);
 
@@ -519,12 +522,12 @@ Point depthTemplateMatching(cv::Mat depthDifImage)
 	imshow("Depth image matching", depth_copy);
 	//imshow("Depth matching result", result);
 
-	if (saveImage == 1)
-	{
-		imwrite("template_match.jpg", result_conv);
-		imwrite("depth_dif_match.jpg", depth_copy);
-		saveImage = 0;
-	}
+	//if (saveImage == 1)
+	//{
+	//	imwrite("template_match.jpg", result_conv);
+	//	imwrite("depth_dif_match.jpg", depth_copy);
+	//	saveImage = 0;
+	//}
 
 	Point depthMatchPoint;
 	depthMatchPoint.x = matchLoc.x + templ.cols/2;
@@ -592,8 +595,31 @@ Point rgbTemplateMatching(cv::Mat rgbDifImage)
 	return rgbMatchPoint;
 }
 
+void showCameraByIndex()
+{
+
+    Mat frame, frameCopy, image;
+    cvNamedWindow("result", 1);
+
+    if(capture)
+    {
+		IplImage* iplImg = cvQueryFrame(capture);
+		frame = iplImg;
+		if(!frame.empty())
+		{
+			if(waitKey( 10 ) >= 0)
+				cvReleaseCapture(&capture);
+
+			imshow("result", frame);
+			//waitKey(0);
+		}
+	}
+}
+
 void drawKinectPointCloud()
 {
+	//showCameraByIndex();
+
 	//  Clear screen and Z-buffer
 	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 
@@ -677,6 +703,12 @@ void drawKinectPointCloud()
 
 	cv::Mat depthDif = getDepth_GaussianBlurDifference(data);
 	//imshow("Depth: Gaussian Blur Difference", depthDif);
+
+	if (saveImage == 1)
+	{
+		imwrite("depth_dif_for_template.jpg", depthDif);
+		saveImage = 0;
+	}
 	
 	cv::Mat gradMag, gradOrient;
 	getGradientMagnitudeAndOrientation(depthDif, &gradMag, &gradOrient);
@@ -832,9 +864,16 @@ int main(int argc, char* argv[])
 	
 	if (!init(argc, argv)) return 1;
     if (!initKinect()) return 1;
+	
+	// Initialize webcam
+	capture = cvCaptureFromCAM(0); //0=default, -1=any camera, 1..99=your camera
+    if(!capture)	return -1;
 
     // Main loop
     glutMainLoop();
+
+	// Release webcam
+
 
     return 0;
 }
