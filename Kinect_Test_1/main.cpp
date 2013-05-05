@@ -19,9 +19,11 @@
 #include <opencv2/highgui/highgui.hpp>  // OpenCV window I/O
 
 #include <vector>
+#include "calibrator.h";
 
 using namespace cv;
 using namespace std;
+using namespace aptarism::vision;
 
 // ----------------------------------------------------------
 // Global Variables
@@ -51,6 +53,9 @@ GLubyte rgbData[width*height*4];
 
 // Webcam variables
 CvCapture* capture;
+
+// Calibrator 
+Calibrator kinectCalibrator;
 
 // Define minimum number of calibration points
 int minCalibrationPoints = 6;
@@ -275,6 +280,25 @@ cv::Mat getRGB_GaussianBlurDifference(cv::Mat rgbImage)
 
 	// Result 2 is returned as CV_8UC1
 	return result2;
+}
+
+// Perform the gaussian blur difference on the rgb image
+// Initially, the rgb image is CV_8UC3 - when grabbed from the webcam
+cv::Mat getRGB_GaussianBlurDifference_32F(cv::Mat rgbImage)
+{
+	cv::Mat grayImage(height, width, CV_32FC1);
+	cvtColor(rgbImage, grayImage, CV_RGB2GRAY);
+	
+	cv::Mat a, b, c, d, result;
+	grayImage.convertTo(a, CV_32FC1);
+
+	cv::GaussianBlur(a, b, cv::Size(21,21), 0, 0, 4);
+	cv::GaussianBlur(b, c, cv::Size(21,21), 0, 0, 4);
+	cv::GaussianBlur(c, d, cv::Size(21,21), 0, 0, 4);
+	result = d - c;
+
+	// Result is returned as CV_32FC1
+	return result;
 }
 
 // Try to remove all the saturated pixels (white, value = 255)
@@ -546,6 +570,7 @@ Point depthTemplateMatching(cv::Mat depthDifImage)
 	return depthMatchPoint;
 }
 
+// Template matching directly on the depth image
 Point depthTemplateMatching_32F(cv::Mat depthImage)
 {
 	double min, max;
@@ -563,7 +588,7 @@ Point depthTemplateMatching_32F(cv::Mat depthImage)
 		minMaxLoc(templIn, &min, &max);
 		cv::Mat templIn_conv;
 		templIn.convertTo(templIn_conv, CV_8UC1, 255.0/max);
-		imshow("Template image", templIn_conv);
+		//imshow("Template image", templIn_conv);
 	}
 
 	
@@ -601,7 +626,7 @@ Point depthTemplateMatching_32F(cv::Mat depthImage)
 	Point minLoc, maxLoc, matchLoc;
 
 	minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc, Mat()); 
-
+	//printf("Matching value = %f \n", maxVal);
 	// since we are using CV_TM_COEFF_NORMED -> max value is the one we are looking for
 	matchLoc = maxLoc;
 
@@ -618,12 +643,21 @@ Point depthTemplateMatching_32F(cv::Mat depthImage)
 	depth_copy.convertTo(depth_conv, CV_8UC1, 255.0/max);
 
 	imshow("Depth image matching", depth_conv);
-	imshow("Depth matching result", result_conv);
+	//imshow("Depth matching result", result_conv);
 
 	Point depthMatchPoint;
 	depthMatchPoint.x = matchLoc.x + templ.cols/2;
 	depthMatchPoint.y = matchLoc.y + templ.rows/2;
-	return depthMatchPoint;
+
+	double t = 0.78;
+	if (maxVal >= t)
+	{
+		return depthMatchPoint;
+	}
+	else
+	{
+		return Point(-100,-100);
+	}
 }
 
 Point rgbTemplateMatching(cv::Mat rgbDifImage)
@@ -686,6 +720,96 @@ Point rgbTemplateMatching(cv::Mat rgbDifImage)
 	return rgbMatchPoint;
 }
 
+// Perform template matching on the rgb difference - 32F
+Point rgbTemplateMatching_32F(cv::Mat rgbDifImage)
+{
+	double min, max;
+	
+	FileStorage f;
+	cv::Mat templIn, templ;
+	if (!f.isOpened()){
+		f.open("rgb_32f.xml", FileStorage::READ);
+		f["rgb_dif"] >> templIn;
+		f.release();
+
+		// NEVER DRAW RECTANGLE ON THE IMAGE
+		//rectangle( templIn, Point(345,300), Point(375, 330), Scalar::all(1), 2, 8, 0 );
+		double min, max;
+		minMaxLoc(templIn, &min, &max);
+		cv::Mat templIn_conv;
+		templIn.convertTo(templIn_conv, CV_8UC1, 255.0/max);
+		//imshow("rgb template", templIn_conv);
+	}
+
+	cv::Rect templRect(345, 300, 30, 30);
+	cv::Mat(templIn, templRect).copyTo(templ);
+
+	minMaxLoc(templ, &min, &max);
+	cv::Mat templ_conv;
+
+	// Display the template
+	templ.convertTo(templ_conv, CV_8UC1, 255.0/(max-min), -min*255.0/(max-min));
+	imshow("RGB Template rectangle cropped", templ_conv);
+
+	f.open("rgb_template_cropped.xml", FileStorage::WRITE);
+	f << "rgb_template" << templ;
+	f.release();
+
+	// create a copy of the depth image
+	cv::Mat rgb_copy;
+	rgbDifImage.copyTo(rgb_copy);
+
+	// type - 0 = 8U, 1 = 8S, 2 = 16U, 3 = 16S, 4 = 32S, 5 = 32F, 6 = 64F
+	assert(templ.type() == rgb_copy.type() || templ.depth() == rgb_copy.depth());
+
+	int result_cols = rgb_copy.cols - templ.cols + 1;
+	int result_rows = rgb_copy.cols - templ.rows + 1;
+	cv::Mat result;
+	result.create(result_rows, result_cols, CV_32FC1);
+
+	// match template only accepts images of type 8U or 32F
+	matchTemplate(rgb_copy, templ, result, CV_TM_CCOEFF_NORMED);
+
+	//normalize( result, result, 0, 1, NORM_MINMAX, -1, Mat());
+
+	double minVal, maxVal;
+	Point minLoc, maxLoc, matchLoc;
+
+	minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc, Mat()); 
+	//printf("Matching value = %f \n", maxVal);
+	// since we are using CV_TM_COEFF_NORMED -> max value is the one we are looking for
+	matchLoc = maxLoc;
+
+	rectangle( rgb_copy, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(1), 2, 8, 0 );
+	line(result, Point(matchLoc.x - 20, matchLoc.y), Point(matchLoc.x + 20, matchLoc.y), Scalar::all(1), 2, 8, 0);
+	line(result, Point(matchLoc.x, matchLoc.y - 20), Point(matchLoc.x, matchLoc.y + 20), Scalar::all(1), 2, 8, 0);
+
+	cv::Mat result_conv, rgb_conv;
+	
+	minMaxLoc(result, &min, &max);
+	result.convertTo(result_conv, CV_8UC1, 255.0/max);
+
+	minMaxLoc(rgb_copy, &min, &max);
+	rgb_copy.convertTo(rgb_conv, CV_8UC1, 255.0/max);
+
+	imshow("RGB image matching", rgb_conv);
+	//imshow("RGB matching result", result_conv);
+
+	Point rgbMatchPoint;
+	rgbMatchPoint.x = matchLoc.x + templ.cols/2;
+	rgbMatchPoint.y = matchLoc.y + templ.rows/2;
+
+	double t = 0.90;
+	if (maxVal >= t)
+	{
+		return rgbMatchPoint;
+	}
+	else
+	{
+		return Point(-100,-100);
+	}
+}
+
 cv::Mat getRGBCameraFrame()
 {
 
@@ -734,6 +858,34 @@ cv::Mat getDepthImageFromPackedData(USHORT * data)
 	return result_float;
 }
 
+// take number image type number (from cv::Mat.type()), get OpenCV's enum string.
+string getImgType(int imgTypeInt)
+{
+    int numImgTypes = 35; // 7 base types, with five channel options each (none or C1, ..., C4)
+
+    int enum_ints[] =       {CV_8U,  CV_8UC1,  CV_8UC2,  CV_8UC3,  CV_8UC4,
+                             CV_8S,  CV_8SC1,  CV_8SC2,  CV_8SC3,  CV_8SC4,
+                             CV_16U, CV_16UC1, CV_16UC2, CV_16UC3, CV_16UC4,
+                             CV_16S, CV_16SC1, CV_16SC2, CV_16SC3, CV_16SC4,
+                             CV_32S, CV_32SC1, CV_32SC2, CV_32SC3, CV_32SC4,
+                             CV_32F, CV_32FC1, CV_32FC2, CV_32FC3, CV_32FC4,
+                             CV_64F, CV_64FC1, CV_64FC2, CV_64FC3, CV_64FC4};
+
+    string enum_strings[] = {"CV_8U",  "CV_8UC1",  "CV_8UC2",  "CV_8UC3",  "CV_8UC4",
+                             "CV_8S",  "CV_8SC1",  "CV_8SC2",  "CV_8SC3",  "CV_8SC4",
+                             "CV_16U", "CV_16UC1", "CV_16UC2", "CV_16UC3", "CV_16UC4",
+                             "CV_16S", "CV_16SC1", "CV_16SC2", "CV_16SC3", "CV_16SC4",
+                             "CV_32S", "CV_32SC1", "CV_32SC2", "CV_32SC3", "CV_32SC4",
+                             "CV_32F", "CV_32FC1", "CV_32FC2", "CV_32FC3", "CV_32FC4",
+                             "CV_64F", "CV_64FC1", "CV_64FC2", "CV_64FC3", "CV_64FC4"};
+
+    for(int i=0; i<numImgTypes; i++)
+    {
+        if(imgTypeInt == enum_ints[i]) return enum_strings[i];
+    }
+    return "unknown image type";
+}
+
 void drawKinectPointCloud()
 {
 	//  Clear screen and Z-buffer
@@ -753,64 +905,42 @@ void drawKinectPointCloud()
 	// Scale all the coordinates: for visualisation purposes
 	glScalef(1.5, 1.5, 1.5);     
 
+	/* Get Kinect Depth Data */ 
+
 	USHORT data[width*height];  // array containing the depth information of each pixel
-	// Get Kinect Depth data
 	getKinectDepthData(data);
 
-	/*
-	// Get Kinect RGB data
-	getKinectRGBData(rgbData);
 
-	// Show original RGB image
-	cv::Mat rgbImage(height, width, CV_8UC4, rgbData);
-	//cv::imshow("RGB: Original Image", rgbImage);
-	*/
+	/* RGB Template Matching */
 	cv::Mat rgbImage = getRGBCameraFrame();
+	cv::Mat rgbDif = getRGB_GaussianBlurDifference_32F(rgbImage);
 
-	// Show original depth image
+	Point rgbMatchingPoint = rgbTemplateMatching_32F(rgbDif);
+	
+	/* Depth Template Matching */
 	cv::Mat original_depth = getDepthImageFromPackedData(data);
-	//cv::imshow("Depth: Original Image", original_depth);
+	//cv::Mat depthDif = getDepth_GaussianBlurDifference_32F(data);
+	Point depthMatchLoc = depthTemplateMatching_32F(original_depth);
+
+	/* Check if matching is found in both pictures */ 
+	if ((rgbMatchingPoint.x != -100 && rgbMatchingPoint.y != -100) && (depthMatchLoc.x != -100 && depthMatchLoc.y != -100))
+	{
+		printf("Matching \n");
+		// Add these points to the calibrator
+		kinectCalibrator.add3DPoint(depthMatchLoc.x, depthMatchLoc.y, NuiDepthPixelToDepth(data[depthMatchLoc.y * width + depthMatchLoc.x]));
+		kinectCalibrator.addProjCam(rgbMatchingPoint.x, rgbMatchingPoint.y);
+	}
+	else
+	{
+		printf("NO Matching \n");
+	}
+
+	kinectCalibrator.calibrate();
 
 	///cv::Mat coloredDepth = getDepthColorReconstruction(depthImage, rgbImage, data);
-
-	//imshow("Depth: Colored from RGB", coloredDepth);
-	//imshow("RGB: Original image", rgbImage);
-
 	//cv::Mat depthDif = getDepth_GaussianBlurDifference(data);
-	//imshow("Depth: Gaussian Blur Difference", depthDif);
-
-	cv::Mat depthDif = getDepth_GaussianBlurDifference_32F(data);
-	// It will convert the image to 8U
-	//imshow("32F Depth dif", depthDif);
-
-
-	Point depthMatchLoc = depthTemplateMatching_32F(original_depth);
-	/*
-	int t = depthDif.type();
-	FileStorage f;
-	if (saveImage == 1)
-	{	
-		f.open("depth_32f.xml", FileStorage::WRITE);
-		f << "original_depth" << original_depth;
-		f.release();
-		
-		saveImage = 0;
-	}
-
-	cv::Mat readIn;
-	if (!f.isOpened()){
-		f.open("depth_32f.xml", FileStorage::READ);
-		f["original_depth"] >> readIn;
-		f.release();
-
-		rectangle( readIn, Point(180,210), Point(240, 270), Scalar::all(1), 2, 8, 0 );
-		double min, max;
-		minMaxLoc(readIn, &min, &max);
-		cv::Mat scale;
-		readIn.convertTo(scale, CV_8UC1, 255.0/max);
-		imshow("read template", scale);
-	}
 	
+	/*
 	//cv::Mat gradMag, gradOrient;
 	//getGradientMagnitudeAndOrientation(depthDif, &gradMag, &gradOrient);
 	//imshow("Depth: Gradient Magnitude", gradMag);
@@ -991,6 +1121,9 @@ int main(int argc, char* argv[])
 	// Initialize webcam
 	capture = cvCaptureFromCAM(0); //0=default, -1=any camera, 1..99=your camera
     if(!capture)	return -1;
+
+	// Initialize calibtrator
+	//kinectCalibrator();
 
     // Main loop
     glutMainLoop();
