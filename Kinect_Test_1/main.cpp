@@ -56,6 +56,8 @@ CvCapture* capture;
 
 // Calibrator 
 Calibrator kinectCalibrator;
+cv::Mat calibResult;
+double aCalib[12];
 
 // Define minimum number of calibration points
 int minCalibrationPoints = 6;
@@ -571,7 +573,7 @@ Point depthTemplateMatching(cv::Mat depthDifImage)
 }
 
 // Template matching directly on the depth image
-Point depthTemplateMatching_32F(cv::Mat depthImage)
+Point depthTemplateMatching_32F(cv::Mat depthImage, int scale)
 {
 	double min, max;
 
@@ -592,8 +594,8 @@ Point depthTemplateMatching_32F(cv::Mat depthImage)
 	}
 
 	
-
-	cv::Rect templRect(180, 210, 60, 60);
+	int resize = 10;
+	cv::Rect templRect(180 + scale * 10, 210 + scale * 10, 60 - scale * 10, 60 - scale * 10);
 	cv::Mat(templIn, templRect).copyTo(templ);
 
 	minMaxLoc(templ, &min, &max);
@@ -649,7 +651,7 @@ Point depthTemplateMatching_32F(cv::Mat depthImage)
 	depthMatchPoint.x = matchLoc.x + templ.cols/2;
 	depthMatchPoint.y = matchLoc.y + templ.rows/2;
 
-	double t = 0.78;
+	double t = 0.78 + scale * 0.1;
 	if (maxVal >= t)
 	{
 		return depthMatchPoint;
@@ -781,8 +783,8 @@ Point rgbTemplateMatching_32F(cv::Mat rgbDifImage)
 	matchLoc = maxLoc;
 
 	rectangle( rgb_copy, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(1), 2, 8, 0 );
-	line(result, Point(matchLoc.x - 20, matchLoc.y), Point(matchLoc.x + 20, matchLoc.y), Scalar::all(1), 2, 8, 0);
-	line(result, Point(matchLoc.x, matchLoc.y - 20), Point(matchLoc.x, matchLoc.y + 20), Scalar::all(1), 2, 8, 0);
+	//line(result, Point(matchLoc.x - 20, matchLoc.y), Point(matchLoc.x + 20, matchLoc.y), Scalar::all(1), 2, 8, 0);
+	//line(result, Point(matchLoc.x, matchLoc.y - 20), Point(matchLoc.x, matchLoc.y + 20), Scalar::all(1), 2, 8, 0);
 
 	cv::Mat result_conv, rgb_conv;
 	
@@ -886,6 +888,27 @@ string getImgType(int imgTypeInt)
     return "unknown image type";
 }
 
+void reproject(const double a[12], double u, double v, double z, double r[2]) {
+	const double a11 = a[0];
+	const double a12 = a[1];
+	const double a13 = a[2];
+	const double a14 = a[3];
+	const double a21 = a[4];
+	const double a22 = a[5];
+	const double a23 = a[6];
+	const double a24 = a[7];
+	const double a31 = a[8];
+	const double a32 = a[9];
+	const double a33 = a[10];
+	const double a34 = a[11];
+
+    const double t1 = a11 * u * z  + a12 * v * z + a13 * z + a14;
+    const double t2 = a21 * u * z  + a22 * v * z + a23 * z + a24;
+    const double t3 = a31 * u * z  + a32 * v * z + a33 * z + a34;
+    r[0] = t1 / t3;
+    r[1] = t2 / t3;
+}
+
 void drawKinectPointCloud()
 {
 	//  Clear screen and Z-buffer
@@ -912,7 +935,11 @@ void drawKinectPointCloud()
 
 
 	/* RGB Template Matching */
-	cv::Mat rgbImage = getRGBCameraFrame();
+	cv::Mat image = getRGBCameraFrame();
+	cv::Mat rgbImage;
+	cv::flip(image, rgbImage, 1);
+	imshow("Original image", rgbImage);
+	
 	cv::Mat rgbDif = getRGB_GaussianBlurDifference_32F(rgbImage);
 
 	Point rgbMatchingPoint = rgbTemplateMatching_32F(rgbDif);
@@ -920,7 +947,11 @@ void drawKinectPointCloud()
 	/* Depth Template Matching */
 	cv::Mat original_depth = getDepthImageFromPackedData(data);
 	//cv::Mat depthDif = getDepth_GaussianBlurDifference_32F(data);
-	Point depthMatchLoc = depthTemplateMatching_32F(original_depth);
+	Point depthMatchLoc = depthTemplateMatching_32F(original_depth, 0);
+	if (depthMatchLoc.x != -100 && depthMatchLoc.y != -100)
+	{
+		depthMatchLoc = depthTemplateMatching_32F(original_depth, 1);
+	}
 
 	/* Check if matching is found in both pictures */ 
 	if ((rgbMatchingPoint.x != -100 && rgbMatchingPoint.y != -100) && (depthMatchLoc.x != -100 && depthMatchLoc.y != -100))
@@ -934,8 +965,17 @@ void drawKinectPointCloud()
 	{
 		printf("NO Matching \n");
 	}
+						
+	if (kinectCalibrator.numEntries() == 12)
+	{
+		calibResult = kinectCalibrator.calibrate();
+		for (int i = 0; i<12; ++i)
+		{
+			aCalib[i] = calibResult.at<double>(i, 0);
+		}
 
-	kinectCalibrator.calibrate();
+		kinectCalibrator.save();
+	}
 
 	///cv::Mat coloredDepth = getDepthColorReconstruction(depthImage, rgbImage, data);
 	//cv::Mat depthDif = getDepth_GaussianBlurDifference(data);
@@ -979,7 +1019,7 @@ void drawKinectPointCloud()
 	//imshow("Correlation result", localMaximaCorrelation);
 
 	// Display the 3D Coloring only when there are at least "minCalibrationPoints" calibration points
-	if (calibPoints.size() >= minCalibrationPoints)
+	if (kinectCalibrator.numEntries() >= 20)
 	{
 		// Display the points as a 3D point cloud
 		glBegin(GL_POINTS);
@@ -999,7 +1039,12 @@ void drawKinectPointCloud()
 					long x_col, y_col;
 					if (pixelDepth != 0)
 					{
-						NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, x, y, pixelDepth, &x_col, &y_col);
+						//NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, x, y, pixelDepth, &x_col, &y_col);
+						double r[2];
+						
+						reproject(aCalib,x,y,depthInMM, r);
+						x_col = r[0];
+						y_col = r[1];
 
 						if ((x_col >= 0 && x_col < width) && (y_col >= 0 && y_col < height))
 						{

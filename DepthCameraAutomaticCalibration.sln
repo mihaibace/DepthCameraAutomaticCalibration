@@ -5,6 +5,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Kinect", "Kinect_Test_1\Kin
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "OpenGL_Test", "OpenGL_Test\OpenGL_Test.vcxproj", "{CB48D93B-ADCD-430E-8C0A-08C7D30F0D56}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Calibration", "Calibration\Calibration.vcxproj", "{C5DD8140-BDCC-41AA-8E2E-633CA0A9E0CE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -19,6 +21,10 @@ Global
 		{CB48D93B-ADCD-430E-8C0A-08C7D30F0D56}.Debug|Win32.Build.0 = Debug|Win32
 		{CB48D93B-ADCD-430E-8C0A-08C7D30F0D56}.Release|Win32.ActiveCfg = Release|Win32
 		{CB48D93B-ADCD-430E-8C0A-08C7D30F0D56}.Release|Win32.Build.0 = Release|Win32
+		{C5DD8140-BDCC-41AA-8E2E-633CA0A9E0CE}.Debug|Win32.ActiveCfg = Debug|Win32
+		{C5DD8140-BDCC-41AA-8E2E-633CA0A9E0CE}.Debug|Win32.Build.0 = Debug|Win32
+		{C5DD8140-BDCC-41AA-8E2E-633CA0A9E0CE}.Release|Win32.ActiveCfg = Release|Win32
+		{C5DD8140-BDCC-41AA-8E2E-633CA0A9E0CE}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
