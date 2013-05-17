@@ -112,10 +112,18 @@ cv::Mat Calibrator::calibrate() const {
         1, 0, 0, 1,
         0, 1, 0, 1,
 		0, 0, .0001, 1};*/
-    double a[12] = {
+    /*double a[12] = {
         3, 0, 100, 1,
         0, 100, 100, 1,
-		0, 0, 1, 1};
+		0, 0, 1, 1};*/
+
+	double a[12] = { 4.9231337978230885e+000, -4.5133732907041813e-002,
+       6.8663135234132096e+003, -8.1905383903158236e+003,
+       2.0915914349339046e-001, 5.5311432327721990e+000,
+       3.5912356121498888e+003, -4.1972765071248577e+003,
+       -6.0195201832224639e-004, -3.2911503359420312e-003,
+	   2.1512582089600880e+001, -1.8660589643064839e+001 };
+
     cv::Mat A(12, 1, CV_64FC1, a);
 
     if (numEntries() <= 6)
@@ -127,7 +135,7 @@ cv::Mat Calibrator::calibrate() const {
 	double prevErr = 1e50;
     for (int i = 0; i < 200; ++i) {
 		cv::Mat ATest = A + lambda*delta;
-		//ATest *= 100.0 / cv::norm(ATest.reshape(1, 3).col(3));
+		ATest *= 100.0 / cv::norm(ATest.reshape(1, 3).col(3));
 
         cv::Mat current = evalFunc(ATest.ptr<double>(0));
         cv::Mat err = reprojDifference(current);

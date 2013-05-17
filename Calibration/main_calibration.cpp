@@ -46,7 +46,7 @@ namespace
 	double aCalib[12];
 
 	// Define minimum number of calibration points
-	unsigned minCalibrationPoints = 12;
+	unsigned minCalibrationPoints = 20;
 
 	// Template matching
 	cv::Mat rgbTemplate;
@@ -54,6 +54,7 @@ namespace
 
 	// Frame skipping variable
 	int frameCount = 0;
+	bool calibrated = false;
 } // namespace
 
 // Capture a frame from the webcam
@@ -315,8 +316,9 @@ void reproject(const double a[12], double u, double v, double z, double * r) {
 // Recontruct the depth image from the color image
 cv::Mat getDepthColorReconstruction(cv::Mat depthImage, cv::Mat rgbImage, USHORT * data)
 {
-	cv::Mat coloredDepth(depthImage.size(), CV_8UC4);
-	assert(coloredDepth.channels() == 4);
+	cv::Mat coloredDepth(depthImage.size(), CV_8UC3);
+	assert(coloredDepth.channels() == 3);
+	assert(rgbImage.channels() == 3);
 
 	for (int y=0; y<coloredDepth.rows; ++y)
 	{
@@ -324,33 +326,39 @@ cv::Mat getDepthColorReconstruction(cv::Mat depthImage, cv::Mat rgbImage, USHORT
 		{
 			long x_col, y_col;
 			USHORT pixelDepth = data[y*width+x];
+			USHORT depthInMM = NuiDepthPixelToDepth(pixelDepth);
 			
 			if (pixelDepth != 0)
 			{
 				// FOR THIS FUNCTION TO WORK - USE PACKED VERSION OF THE DEPTH
-				NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, x, y, pixelDepth, &x_col, &y_col);
+				//NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, x, y, pixelDepth, &x_col, &y_col);
+				double r[2];
+				reproject(aCalib, x, y, (float)(depthInMM/1000.0), r);
+				x_col = r[0];
+				y_col = r[1];
+			
 				if ((x_col >= 0 && x_col < width) && (y_col >= 0 && y_col < height))
 				{
 					// take the color from x_col and y_col and project it in the depth image
-					for (int c = 0; c < 4; ++c) 
+					for (int c = 0; c < 3; ++c) 
 					{
-						coloredDepth.ptr<uchar>(y)[x * 4 + c] = rgbImage.ptr<uchar>(y_col)[x_col * 4 + c]; 
+						coloredDepth.ptr<uchar>(y)[x * 3 + c] = rgbImage.ptr<uchar>(y_col)[x_col * 3 + c]; 
 					}
 				}
 				else
 				{
-					for (int c = 0; c < 4; ++c) 
+					for (int c = 0; c < 3; ++c) 
 					{
-						coloredDepth.ptr<uchar>(y)[x * 4 + c] = 0; 
+						coloredDepth.ptr<uchar>(y)[x * 3 + c] = 0; 
 					}
 				}
 			}
 			else
 			{
 				// We have no depth information about this points (depth from kinect = 0)
-				for (int c = 0; c < 4; ++c) 
+				for (int c = 0; c < 3; ++c) 
 				{
-					coloredDepth.ptr<uchar>(y)[x * 4 + c] = 255; 
+					coloredDepth.ptr<uchar>(y)[x * 3 + c] = 255; 
 				}
 			}
 		}
@@ -385,7 +393,7 @@ cv::Mat debugProjections(cv::Mat rgbImage)
 
 	for (unsigned i = 0; i < kinectCalibrator.numEntries(); ++i) 
 	{
-		// Draw projection with green
+		// Draw projection with greens
 		line(rgbImage, Point(projections[i].x - 20, projections[i].y), Point(projections[i].x + 20, projections[i].y), Scalar(0, 255, 0), 1, 8, 0);
 		line(rgbImage, Point(projections[i].x, projections[i].y - 20), Point(projections[i].x, projections[i].y + 20), Scalar(0, 255, 0), 1, 8, 0);
 	}
@@ -412,12 +420,21 @@ void test_loop()
 	USHORT data[width*height];// array containing the depth information of each pixel
 	getKinectPackedDepthData(data);
 
+	// Get depth data
+	cv::Mat original_depth = getDepthImageFromPackedData(data);
+
 	// Get RGB data
 	cv::Mat image = getRGBCameraFrame();
 	cv::Mat rgbImage;
 	cv::flip(image, rgbImage, 1);
-	cv::Mat rClone = debugProjections(rgbImage);
+	/*cv::Mat rClone = debugProjections(rgbImage);
 	imshow("original_image", rClone);
+	*/
+	if (calibrated == true)
+	{
+		cv::Mat depthColor = getDepthColorReconstruction(original_depth, rgbImage, data);
+		imshow("Depth Color Reconstruction", depthColor);
+	}
 
 	if (frameCount % 13 == 0)
 	{
@@ -425,7 +442,6 @@ void test_loop()
 		Point rgbMatchingPoint; 
 		Point depthMatchingPoint;
 		cv::Mat rgbDif = getRGB_GaussianBlurDifference_32F(rgbImage);
-		cv::Mat original_depth = getDepthImageFromPackedData(data);
 		bool rgbRes = rgbTemplateMatching_32F(rgbDif, &rgbMatchingPoint);
 		bool depthRes = depthTemplateMatching_32F(original_depth, &depthMatchingPoint);
 
@@ -458,13 +474,14 @@ int main()
 	// init webcam
     if(!(capture = cvCaptureFromCAM(0)))	return -1;
 
-	//calibResult = kinectCalibrator.load();
+	calibResult = kinectCalibrator.load();
 
-	/*calibResult = kinectCalibrator.calibrate();
+	calibResult = kinectCalibrator.calibrate();
+	calibrated = true;
 	for (int i = 0; i<12; ++i)
 	{
 		aCalib[i] = calibResult.at<double>(i, 0);
-	}*/
+	}
 
 	// Preprocessing
 	templateMatchingPreprocessing();
