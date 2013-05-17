@@ -325,14 +325,11 @@ cv::Mat getDepthColorReconstruction(cv::Mat depthImage, cv::Mat rgbImage, USHORT
 		for (int x=0; x<coloredDepth.cols; ++x)
 		{
 			long x_col, y_col;
-			USHORT pixelDepth = data[y*width+x];
-			USHORT depthInMM = NuiDepthPixelToDepth(pixelDepth);
+			double r[2];
+			USHORT depthInMM = NuiDepthPixelToDepth(data[y*width+x]);
 			
-			if (pixelDepth != 0)
+			if (depthInMM != 0)
 			{
-				// FOR THIS FUNCTION TO WORK - USE PACKED VERSION OF THE DEPTH
-				//NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, x, y, pixelDepth, &x_col, &y_col);
-				double r[2];
 				reproject(aCalib, x, y, (float)(depthInMM/1000.0), r);
 				x_col = r[0];
 				y_col = r[1];
