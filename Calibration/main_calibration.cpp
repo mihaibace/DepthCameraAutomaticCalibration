@@ -50,7 +50,9 @@ namespace
 	unsigned minCalibrationPoints = 20;
 
 	// Template matching
-	cv::Mat rgbTemplate; // Allocation error?
+	cv::Mat rgbTemplate_1;
+	cv::Mat rgbTemplate_2;
+	cv::Mat rgbTemplate_3;
 	cv::Mat depthTemplate_1;
 	cv::Mat depthTemplate_2;
 	cv::Mat depthTemplate_3;
@@ -192,7 +194,10 @@ void templateMatchingPreprocessing()
 	}
 
 	cv::Rect templRect1(345, 300, 30, 30);
-	cv::Mat(templIn, templRect1).copyTo(rgbTemplate);
+	cv::Mat(templIn, templRect1).copyTo(rgbTemplate_1);
+
+	cv::pyrDown(rgbTemplate_1, rgbTemplate_2);
+	cv::pyrUp(rgbTemplate_1, rgbTemplate_3);
 
 	// READ - depth template 
 	if (!f.isOpened())
@@ -202,17 +207,11 @@ void templateMatchingPreprocessing()
 		f.release();
 	}
 	
-	// 60 by 60 template
 	cv::Rect templRect2(180, 210, 60, 60);
 	cv::Mat(templIn, templRect2).copyTo(depthTemplate_1);
 	
-	// 50 by 50 template
-	cv::Rect templRect3(190, 220, 50, 50);
-	cv::Mat(templIn, templRect3).copyTo(depthTemplate_2);
-	
-	// 45 by 45 template
-	cv::Rect templRect4(195, 225, 45, 45);
-	cv::Mat(templIn, templRect4).copyTo(depthTemplate_3);
+	cv::pyrDown(depthTemplate_1, depthTemplate_2);
+	cv::pyrUp(depthTemplate_1, depthTemplate_3);
 }
 
 // Perform the gaussian blur difference on the rgb image (initially, the rgb image is CV_8UC3 - when grabbed from the webcam)
@@ -247,7 +246,7 @@ cv::Mat convertToDisplay(cv::Mat inputImage)
 }
 
 // Depth template matching - performed directly on the depth image
-bool depthTemplateMatching_32F(cv::Mat depthImage, cv::Mat depthTempl, double threshold, cv::Point * depthMatchPoint, cv::Scalar rectColor)
+bool depthTemplateMatching_32F(cv::Mat depthImage, cv::Mat depthTempl, double threshold, cv::Point * depthMatchPoint, cv::Scalar rectColor, string window_name)
 {
 	double min, max;
 
@@ -273,13 +272,15 @@ bool depthTemplateMatching_32F(cv::Mat depthImage, cv::Mat depthTempl, double th
 		rectangle( depth_conv, matchLoc, Point( matchLoc.x + depthTempl.cols , matchLoc.y + depthTempl.rows ), Scalar(0,0,255), 2, 8, 0 );
 	else
 		rectangle( depth_conv, matchLoc, Point( matchLoc.x + depthTempl.cols , matchLoc.y + depthTempl.rows ), rectColor, 2, 8, 0 );
-	imshow("depth_matching", depth_conv);
+	imshow(window_name, depth_conv);
 
 	(*depthMatchPoint).x = matchLoc.x + depthTempl.cols/2;
 	(*depthMatchPoint).y = matchLoc.y + depthTempl.rows/2;
 
 	if (max < threshold)	return false;
 	
+	printf("%s : %f \n", window_name.c_str(), max);
+
 	return true;
 }
 
@@ -315,14 +316,16 @@ bool rgbTemplateMatching_32F(cv::Mat rgbDifImage, cv::Mat rgbTempl, double thres
 	(*rgbMatchPoint).x = matchLoc.x + rgbTempl.cols/2;
 	(*rgbMatchPoint).y = matchLoc.y + rgbTempl.rows/2;
 
-	if (max < threshold)	
-		return false;
+	if (max < threshold)	return false;
+
+	printf("%s : %f \n", window_name.c_str(), max);
 
 	return true;
 }
 
 // Reproject a 3D point to a 2D point
-void reproject(const double a[12], double u, double v, double z, double * r) {
+void reproject(const double a[12], double u, double v, double z, double * r) 
+{
 	const double a11 = a[0];
 	const double a12 = a[1];
 	const double a13 = a[2];
@@ -554,9 +557,6 @@ void loop()
 	cv::flip(image, rgbImage, 1);
 	cv::Mat rClone = debugProjections(rgbImage);
 	imshow("original_image", rClone);
-	cv::Mat reducedImage;
-	cv::pyrDown(rgbImage, reducedImage); 
-	imshow("reduced_image", reducedImage);
 	
 	if (!calibrated)
 	{
@@ -579,11 +579,23 @@ void loop()
 		Point depthMatchingPoint;
 		cv::Mat rgbDif = getRGB_GaussianBlurDifference_32F(rgbImage);
 		cv::Mat kinectRGBDif = getRGB_GaussianBlurDifference_32F(kinectRGBImage);
-		bool rgbRes = rgbTemplateMatching_32F(rgbDif, rgbTemplate, 0.90, &rgbMatchingPoint, "rgb_matching");
+
+		cv::Mat rgbDif_double, kinectRGBDif_double, original_depth_double;
+		cv::pyrUp(rgbDif, rgbDif_double);
+		cv::pyrUp(kinectRGBDif, kinectRGBDif_double);
+		cv::pyrUp(original_depth, original_depth_double);
+
+		bool rgbRes = rgbTemplateMatching_32F(rgbDif, rgbTemplate_1, 0.93, &rgbMatchingPoint, "rgb_matching");
+		if (!rgbRes)	rgbRes = rgbTemplateMatching_32F(rgbDif, rgbTemplate_2, 0.95, &rgbMatchingPoint, "rgb_matching");
+		if (!rgbRes)	rgbRes = rgbTemplateMatching_32F(rgbDif_double, rgbTemplate_3, 0.93, &rgbMatchingPoint, "rgb_matching_double");
 		
-		bool kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif, rgbTemplate, 0.93, &kinectRGBMatchingPoint, "kinect_rgb_matching");
-		bool kinectDepthRes = depthTemplateMatching_32F(original_depth, depthTemplate_1, 0.8, &depthMatchingPoint, Scalar(0,255,0));
-		if (kinectDepthRes == false)	kinectDepthRes = depthTemplateMatching_32F(original_depth, depthTemplate_2, 0.88, &depthMatchingPoint, Scalar(0,255,0));
+		bool kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif, rgbTemplate_1, 0.95, &kinectRGBMatchingPoint, "kinect_rgb_matching");
+		if (!kinectRGBRes)	kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif, rgbTemplate_2, 0.95, &kinectRGBMatchingPoint, "kinect_rgb_matching");
+		//if (!kinectRGBRes)	kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif_red, rgbTemplate_1, 0.95, &kinectRGBMatchingPoint, "kinect_rgb_matching_double");
+
+		bool kinectDepthRes = depthTemplateMatching_32F(original_depth, depthTemplate_1, 0.8, &depthMatchingPoint, Scalar(0,255,0), "depth_matching");
+		if (!kinectDepthRes)	kinectDepthRes = depthTemplateMatching_32F(original_depth, depthTemplate_2, 0.88, &depthMatchingPoint, Scalar(0,255,0), "depth_matching");
+		//if (!kinectDepthRes)	kinectDepthRes = depthTemplateMatching_32F(original_depth_red, depthTemplate_1, 0.88, &depthMatchingPoint, Scalar(0,255,0), "depth_matching_double");
 		
 		long x, y;
 		NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, depthMatchingPoint.x, depthMatchingPoint.y, 
@@ -632,6 +644,9 @@ int main()
 	cvNamedWindow("depth_matching", CV_WINDOW_AUTOSIZE);
 	cvNamedWindow("rgb_matching", CV_WINDOW_AUTOSIZE);
 	cvNamedWindow("kinect_rgb_matching", CV_WINDOW_AUTOSIZE);
+	cvNamedWindow("depth_matching_double", CV_WINDOW_AUTOSIZE);
+	cvNamedWindow("rgb_matching_double", CV_WINDOW_AUTOSIZE);
+	cvNamedWindow("kinect_rgb_matching_double", CV_WINDOW_AUTOSIZE);
 	
 	// Main loop
 	while (1) 
@@ -647,6 +662,9 @@ int main()
 	cvDestroyWindow("depth_matching");
 	cvDestroyWindow("rgb_matching");
 	cvDestroyWindow("kinect_rgb_matching");
-	
+	cvDestroyWindow("depth_matching_double");
+	cvDestroyWindow("rgb_matching_double");
+	cvDestroyWindow("kinect_rgb_matching_double");
+
 	return 0;
 }
