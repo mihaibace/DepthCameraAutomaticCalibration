@@ -11,16 +11,23 @@ namespace vision {
 
 class Calibrator {
 public:
-  
+  typedef std::vector<cv::Point2f> Point2DVector;
+  typedef std::vector<cv::Point3f> Point3DVector;
+
+  void setProjections(Point2DVector v){
+	  projections_ = v;
+  }
+
+  void setPoints3D(Point3DVector v){
+	  points3D_ = v;
+  }
+
   void addProjCam(float x, float y) {
       projections_.push_back(cv::Point2f(x, y));
   }
   void add3DPoint(float x, float y, float depth) {
       points3D_.push_back(cv::Point3f(x, y, depth));
   }
-
-  typedef std::vector<cv::Point2f> Point2DVector;
-  typedef std::vector<cv::Point3f> Point3DVector;
 
   const Point2DVector& projections() { return projections_; }
   const Point3DVector& points3D() const { return points3D_; }
