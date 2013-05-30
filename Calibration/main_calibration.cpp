@@ -196,8 +196,8 @@ void templateMatchingPreprocessing()
 	cv::Rect templRect1(345, 300, 30, 30);
 	cv::Mat(templIn, templRect1).copyTo(rgbTemplate_1);
 
-	cv::pyrDown(rgbTemplate_1, rgbTemplate_2);
-	cv::pyrUp(rgbTemplate_1, rgbTemplate_3);
+	cv::pyrDown(rgbTemplate_1, rgbTemplate_2); // smaller template
+	cv::pyrUp(rgbTemplate_1, rgbTemplate_3); // larger template
 
 	// READ - depth template 
 	if (!f.isOpened())
@@ -210,8 +210,8 @@ void templateMatchingPreprocessing()
 	cv::Rect templRect2(180, 210, 60, 60);
 	cv::Mat(templIn, templRect2).copyTo(depthTemplate_1);
 	
-	cv::pyrDown(depthTemplate_1, depthTemplate_2);
-	cv::pyrUp(depthTemplate_1, depthTemplate_3);
+	cv::pyrDown(depthTemplate_1, depthTemplate_2); // smaller template
+	cv::pyrUp(depthTemplate_1, depthTemplate_3); // larger template
 }
 
 // Perform the gaussian blur difference on the rgb image (initially, the rgb image is CV_8UC3 - when grabbed from the webcam)
@@ -246,7 +246,7 @@ cv::Mat convertToDisplay(cv::Mat inputImage)
 }
 
 // Depth template matching - performed directly on the depth image
-bool depthTemplateMatching_32F(cv::Mat depthImage, cv::Mat depthTempl, double threshold, cv::Point * depthMatchPoint, cv::Scalar rectColor, string window_name)
+bool depthTemplateMatching_32F(cv::Mat depthImage, cv::Mat depthTempl, double threshold, cv::Point * depthMatchPoint, cv::Scalar rectColor, string window_name, float scale)
 {
 	double min, max;
 
@@ -274,18 +274,18 @@ bool depthTemplateMatching_32F(cv::Mat depthImage, cv::Mat depthTempl, double th
 		rectangle( depth_conv, matchLoc, Point( matchLoc.x + depthTempl.cols , matchLoc.y + depthTempl.rows ), rectColor, 2, 8, 0 );
 	imshow(window_name, depth_conv);
 
-	(*depthMatchPoint).x = matchLoc.x + depthTempl.cols/2;
-	(*depthMatchPoint).y = matchLoc.y + depthTempl.rows/2;
+	(*depthMatchPoint).x = (matchLoc.x + depthTempl.cols/2) * scale;
+	(*depthMatchPoint).y = (matchLoc.y * scale + depthTempl.rows/2) * scale;
 
 	if (max < threshold)	return false;
 	
-	printf("%s : %f \n", window_name.c_str(), max);
+	//printf("%s : %f \n", window_name.c_str(), max);
 
 	return true;
 }
 
 // Perform template matching on the rgb difference - 32F
-bool rgbTemplateMatching_32F(cv::Mat rgbDifImage, cv::Mat rgbTempl, double threshold, Point * rgbMatchPoint, string window_name)
+bool rgbTemplateMatching_32F(cv::Mat rgbDifImage, cv::Mat rgbTempl, double threshold, Point * rgbMatchPoint, string window_name, float scale)
 {
 	double min, max;
 
@@ -313,12 +313,12 @@ bool rgbTemplateMatching_32F(cv::Mat rgbDifImage, cv::Mat rgbTempl, double thres
 		
 	imshow(window_name, match_conv);
 
-	(*rgbMatchPoint).x = matchLoc.x + rgbTempl.cols/2;
-	(*rgbMatchPoint).y = matchLoc.y + rgbTempl.rows/2;
+	(*rgbMatchPoint).x = (matchLoc.x + rgbTempl.cols/2) * scale;
+	(*rgbMatchPoint).y = (matchLoc.y + rgbTempl.rows/2) * scale;
 
 	if (max < threshold)	return false;
 
-	printf("%s : %f \n", window_name.c_str(), max);
+	//printf("%s : %f \n", window_name.c_str(), max);
 
 	return true;
 }
@@ -580,44 +580,353 @@ void loop()
 		cv::Mat rgbDif = getRGB_GaussianBlurDifference_32F(rgbImage);
 		cv::Mat kinectRGBDif = getRGB_GaussianBlurDifference_32F(kinectRGBImage);
 
-		cv::Mat rgbDif_double, kinectRGBDif_double, original_depth_double;
+		cv::Mat rgbDif_double, rgbDif_red, kinectRGBDif_double, kinectRGBDif_red, original_depth_double, original_depth_red;
 		cv::pyrUp(rgbDif, rgbDif_double);
 		cv::pyrUp(kinectRGBDif, kinectRGBDif_double);
 		cv::pyrUp(original_depth, original_depth_double);
+		cv::pyrDown(rgbDif, rgbDif_red);
+		cv::pyrDown(kinectRGBDif, kinectRGBDif_red);
+		cv::pyrDown(original_depth, original_depth_red);
 
-		bool rgbRes = rgbTemplateMatching_32F(rgbDif, rgbTemplate_1, 0.93, &rgbMatchingPoint, "rgb_matching");
-		if (!rgbRes)	rgbRes = rgbTemplateMatching_32F(rgbDif, rgbTemplate_2, 0.95, &rgbMatchingPoint, "rgb_matching");
-		if (!rgbRes)	rgbRes = rgbTemplateMatching_32F(rgbDif_double, rgbTemplate_3, 0.93, &rgbMatchingPoint, "rgb_matching_double");
-		
-		bool kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif, rgbTemplate_1, 0.95, &kinectRGBMatchingPoint, "kinect_rgb_matching");
-		if (!kinectRGBRes)	kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif, rgbTemplate_2, 0.95, &kinectRGBMatchingPoint, "kinect_rgb_matching");
-		//if (!kinectRGBRes)	kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif_red, rgbTemplate_1, 0.95, &kinectRGBMatchingPoint, "kinect_rgb_matching_double");
+		//bool rgbRes = rgbTemplateMatching_32F(rgbDif, rgbTemplate_1, 0.93, &rgbMatchingPoint, "rgb_matching");
+		//if (!rgbRes)	rgbRes = rgbTemplateMatching_32F(rgbDif, rgbTemplate_2, 0.95, &rgbMatchingPoint, "rgb_matching");
+		//if (!rgbRes)	rgbRes = rgbTemplateMatching_32F(rgbDif_double, rgbTemplate_3, 0.93, &rgbMatchingPoint, "rgb_matching_double");
+		//
+		//bool kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif, rgbTemplate_1, 0.95, &kinectRGBMatchingPoint, "kinect_rgb_matching");
+		//if (!kinectRGBRes)	kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif, rgbTemplate_2, 0.95, &kinectRGBMatchingPoint, "kinect_rgb_matching");
+		////if (!kinectRGBRes)	kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif_red, rgbTemplate_1, 0.95, &kinectRGBMatchingPoint, "kinect_rgb_matching_double");
 
-		bool kinectDepthRes = depthTemplateMatching_32F(original_depth, depthTemplate_1, 0.8, &depthMatchingPoint, Scalar(0,255,0), "depth_matching");
-		if (!kinectDepthRes)	kinectDepthRes = depthTemplateMatching_32F(original_depth, depthTemplate_2, 0.88, &depthMatchingPoint, Scalar(0,255,0), "depth_matching");
-		//if (!kinectDepthRes)	kinectDepthRes = depthTemplateMatching_32F(original_depth_red, depthTemplate_1, 0.88, &depthMatchingPoint, Scalar(0,255,0), "depth_matching_double");
-		
-		long x, y;
-		NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, depthMatchingPoint.x, depthMatchingPoint.y, 
-			getPackedDepth(data, depthMatchingPoint.x, depthMatchingPoint.y), &x, &y);
+		//bool kinectDepthRes = depthTemplateMatching_32F(original_depth, depthTemplate_1, 0.8, &depthMatchingPoint, Scalar(0,255,0), "depth_matching");
+		//if (!kinectDepthRes)	kinectDepthRes = depthTemplateMatching_32F(original_depth, depthTemplate_2, 0.88, &depthMatchingPoint, Scalar(0,255,0), "depth_matching");
+		////if (!kinectDepthRes)	kinectDepthRes = depthTemplateMatching_32F(original_depth_red, depthTemplate_1, 0.88, &depthMatchingPoint, Scalar(0,255,0), "depth_matching_double");
+		//
+		//long x, y;
+		//NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, depthMatchingPoint.x, depthMatchingPoint.y, 
+		//	getPackedDepth(data, depthMatchingPoint.x, depthMatchingPoint.y), &x, &y);
 
-		if (abs(x-kinectRGBMatchingPoint.x) < 5 && abs(y-kinectRGBMatchingPoint.y) < 5)
-		{
-			// Test matching in both images
-			if (rgbRes == true && kinectDepthRes == true && kinectRGBRes == true && kinectCalibrator.numEntries() < minCalibrationPoints)
-			{
-				// Add these points to the calibrator
-				kinectCalibrator.add3DPoint(depthMatchingPoint.x, depthMatchingPoint.y, getDepthInMeters(data, depthMatchingPoint.x, depthMatchingPoint.y));
-				kinectCalibrator.addProjCam(rgbMatchingPoint.x, rgbMatchingPoint.y);
+		//if (abs(x-kinectRGBMatchingPoint.x) < 5 && abs(y-kinectRGBMatchingPoint.y) < 5)
+		//{
+		//	// Test matching in both images
+		//	if (rgbRes == true && kinectDepthRes == true && kinectRGBRes == true && kinectCalibrator.numEntries() < minCalibrationPoints)
+		//	{
+		//		// Add these points to the calibrator
+		//		kinectCalibrator.add3DPoint(depthMatchingPoint.x, depthMatchingPoint.y, getDepthInMeters(data, depthMatchingPoint.x, depthMatchingPoint.y));
+		//		kinectCalibrator.addProjCam(rgbMatchingPoint.x, rgbMatchingPoint.y);
 
-				printf("Matching \n");
-			}
-		}
+		//		printf("Matching \n");
+		//	}
+		//}
 		frameCount = 1;
 	}
 	else
 	{
 		frameCount++;
+	}
+}
+
+// Make sure that two points are far away from each other
+bool checkPoints(cv::Point a, cv::Point b, int threshold)
+{
+	float dist = sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
+
+	if (dist < threshold)	return false;
+
+	return true;
+}
+
+// Validate the match between the kinect depth point and RGB point using its calibration
+bool validateKinectMatch(cv::Point3f a, cv::Point2f b)
+{
+	long x, y;
+	NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, a.x, a.y, a.z, &x, &y);
+	Point2f t(x,y);
+
+	if (checkPoints(t,b,10) == false) // distance is less than 10 pixels
+		return true;
+
+	return false;
+}
+
+// Filter green color, tip of the pattern
+cv::Mat getColorMask(cv::Mat inputImg, int w, int h, string window_name, cv::Scalar min_color) // width and height of a window
+{
+	cv::Mat colorFilter, imgHsv, imgRes;
+	cv::cvtColor(inputImg, imgHsv, CV_RGB2HSV, 3);//convert the color space
+
+	cv::Scalar max_color(75,255,255);
+	cv::inRange(imgHsv, min_color,max_color, colorFilter);//search for the color in image
+
+	//imshow(window_name, colorFilter);
+	imgRes = colorFilter.clone();
+
+	// Find median X and median Y
+	int ww = inputImg.size().width;
+	int hh = inputImg.size().height;
+	int xArr[640];
+	for (int i=0; i<640; ++i)
+		xArr[i] = 0;
+	int yArr[480];
+	for (int i=0; i<480; ++i)
+		yArr[i] = 0;
+
+	int countX = 0, countY = 0;
+	for (int y=0; y<hh; ++y)
+	{
+		for (int x = 0; x<ww; ++x)
+		{
+			if (imgRes.ptr<uchar>(y)[x] > 0)
+			{
+				if (xArr[x] == 0)
+				{
+					xArr[x] = 1;
+					countX++;
+				}
+				
+				if (yArr[y] == 0)
+				{
+					yArr[y] = 1;
+					countY++;
+				}
+			}
+		}
+	}
+
+	int medX = countX/2;
+	int medY = countY/2;
+
+	int i = 0;
+	while (medX > 0)
+	{
+		if (xArr[i] == 1)
+			medX--;
+		i++;
+	}
+	int cX = i;
+
+	i = 0;
+	while (medY > 0)
+	{
+		if (yArr[i] == 1)
+			medY--;
+		i++;
+	}
+	int cY = i;
+
+	// Draw the window if there are some points in the image
+	if (i != 0)
+	{
+		for (int y=0; y<hh; ++y)
+		{
+			for (int x=0; x<ww; ++x)
+			{
+				if ((x >= 0 && x < inputImg.size().width) && (y >= 0 && y < inputImg.size().height))
+					imgRes.ptr<uchar>(y)[x] = 0; 
+			}
+		}
+
+		for (int y=cY-h/2; y<=cY+h/2; ++y)
+		{
+			for (int x=cX-w/2; x<=cX+w/2; ++x)
+			{
+				if ((x >= 0 && x < inputImg.size().width) && (y >= 0 && y < inputImg.size().height))
+					imgRes.ptr<uchar>(y)[x] = 255; 
+			}
+		}
+	}
+
+	//imshow("window", imgRes);
+
+	return imgRes;
+}
+
+// Filter an image based on the color mask that is provided as input 
+cv::Mat filterImageByColor(cv::Mat inputImg, cv::Mat maskImg)
+{
+	cv::Mat resultImg = inputImg.clone();
+
+	int w = inputImg.size().width;
+	int h = inputImg.size().height;
+
+	for (int y=0; y<h; ++y)
+	{
+		for (int x=0; x<w; ++x)
+		{
+			if (maskImg.ptr<uchar>(y)[x] > 0)
+			{
+				// copy image
+				for (int c = 0; c < inputImg.channels(); ++c) 
+				{
+					resultImg.ptr<uchar>(y)[x * inputImg.channels() + c] = inputImg.ptr<uchar>(y)[x * inputImg.channels() + c]; 
+				}
+			}
+			else
+			{
+				// black
+				for (int c = 0; c < inputImg.channels(); ++c) 
+				{
+					resultImg.ptr<uchar>(y)[x * inputImg.channels() + c] = 0; 
+				}
+			}
+		}
+	}
+
+	return resultImg;
+}
+
+void test_loop()
+{
+	USHORT data[width*height];// array containing the depth information of each pixel
+	getKinectPackedDepthData(data);
+
+	// Kinect: Get depth data
+	cv::Mat original_depth = getDepthImageFromPackedData(data);
+
+	// Kinect: Get RGB data
+	getKinectRGBData(rgbData);
+	cv::Mat kinectRGBImage(height, width, CV_8UC4, rgbData);
+
+	// Get RGB data
+	cv::Mat image = getRGBCameraFrame();
+	cv::Mat rgbImage;
+	cv::flip(image, rgbImage, 1);
+
+	// Template matching
+	Point rgbMatchingPoint; 
+	Point kinectRGBMatchingPoint;
+	Point depthMatchingPoint;
+	cv::Mat rgbDif = getRGB_GaussianBlurDifference_32F(rgbImage);
+	cv::Mat kinectRGBDif = getRGB_GaussianBlurDifference_32F(kinectRGBImage);
+
+	cv::Mat rgbDif_double, rgbDif_red, kinectRGBDif_double, kinectRGBDif_red, original_depth_double, original_depth_red;
+	cv::pyrUp(rgbDif, rgbDif_double);
+	cv::pyrUp(kinectRGBDif, kinectRGBDif_double);
+	cv::pyrUp(original_depth, original_depth_double);
+	cv::pyrDown(rgbDif, rgbDif_red);
+	cv::pyrDown(kinectRGBDif, kinectRGBDif_red);
+	cv::pyrDown(original_depth, original_depth_red);
+
+	bool rgbRes, kinectRGBRes, kinectDepthRes;
+
+	kinectDepthRes = depthTemplateMatching_32F(original_depth, depthTemplate_1, 0.7, &depthMatchingPoint, Scalar(0,255,0), "depth_matching", 1);
+	kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif_red, rgbTemplate_1, 0.7, &kinectRGBMatchingPoint, "kinect_rgb_matching_red", 2);
+	
+	Point3f kDepthPoint(depthMatchingPoint.x, depthMatchingPoint.y, getPackedDepth(data, depthMatchingPoint.x, depthMatchingPoint.y));
+	Point2f kRGBPoint(kinectRGBMatchingPoint.x, kinectRGBMatchingPoint.y);
+
+	if (kinectDepthRes && kinectRGBRes && validateKinectMatch(kDepthPoint, kRGBPoint))
+	{
+		// It is close
+		rgbRes = rgbTemplateMatching_32F(rgbDif_red, rgbTemplate_1, 0.70, &rgbMatchingPoint, "rgb_matching_red", 2);	
+	}
+	else
+	{
+		// it is far away
+		kinectDepthRes = depthTemplateMatching_32F(original_depth_double, depthTemplate_1, 0.70, &depthMatchingPoint, Scalar(0,255,0), "depth_matching_double", 0.5);
+		rgbTemplateMatching_32F(rgbDif, rgbTemplate_1, 0.72, &rgbMatchingPoint, "rgb_matching", 1);
+		kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif, rgbTemplate_1, 0.72, &kinectRGBMatchingPoint, "kinect_rgb_matching", 1);
+	}
+	
+	long x, y;
+		NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, depthMatchingPoint.x, depthMatchingPoint.y, 
+			getPackedDepth(data, depthMatchingPoint.x, depthMatchingPoint.y), &x, &y);
+
+	if (abs(x-kinectRGBMatchingPoint.x) < 10 && abs(y-kinectRGBMatchingPoint.y) < 10)
+		{
+			// Test matching in both images
+			if (rgbRes == true && kinectDepthRes == true && kinectRGBRes == true) // && kinectCalibrator.numEntries() < minCalibrationPoints)
+			{
+				// Add these points to the calibrator
+				Point2DVector projections = kinectCalibrator.projections();
+				cv::Point lastPoint(-100, -100);
+				if (projections.size() > 0)
+					lastPoint = projections.at(projections.size()-1);
+
+				if (checkPoints(lastPoint, rgbMatchingPoint, 50) == true)
+				{
+					kinectCalibrator.add3DPoint(depthMatchingPoint.x, depthMatchingPoint.y, getDepthInMeters(data, depthMatchingPoint.x, depthMatchingPoint.y));
+					kinectCalibrator.addProjCam(rgbMatchingPoint.x, rgbMatchingPoint.y);
+
+					printf("Matching \n");
+				}
+			}
+		}
+}
+
+void test_loop2()
+{
+	USHORT data[width*height];// array containing the depth information of each pixel
+	getKinectPackedDepthData(data);
+
+	// Kinect: Get depth data
+	cv::Mat original_depth = getDepthImageFromPackedData(data);
+
+	// Kinect: Get RGB data
+	getKinectRGBData(rgbData);
+	cv::Mat kinectRGBImage(height, width, CV_8UC4, rgbData);
+
+	// Get RGB data
+	cv::Mat image = getRGBCameraFrame();
+	cv::Mat rgbImage;
+	cv::flip(image, rgbImage, 1);
+
+	// RGB filtering on webcam
+	cv::Scalar min_color(38,100,100);
+	cv::Mat mask = getColorMask(rgbImage, 150, 150, "webcam filtering", min_color);
+	cv::Mat rgbFilteredImage = filterImageByColor(rgbImage, mask);
+
+	// RGB filterig on kinect
+	cv::Scalar min_color2(38,120,120);
+	mask = getColorMask(kinectRGBImage, 150, 150, "kinect filtering", min_color2);
+	cv::Mat kinectRGBFilteredImage = filterImageByColor(kinectRGBImage, mask);
+
+	//imshow("Filtered Image", rgbFilteredImage);
+	//imshow("Kinect Filtered Image", kinectRGBFilteredImage);
+	//imshow("Kinect - Filtered Image", kinectRGBImage);
+	//imshow("Original image", rgbImage);
+
+	// Template matching
+	Point rgbMatchingPoint; 
+	cv::Mat rgbDif = getRGB_GaussianBlurDifference_32F(rgbImage);
+	bool rgbRes = rgbTemplateMatching_32F(rgbDif, rgbTemplate_1, 0.70, &rgbMatchingPoint, "rgb_matching", 2);	
+
+	FileStorage f;
+	if ((cvWaitKey(1) & 255) == 112) 
+	{
+		
+		f.open("rgb_dif_far.xml", FileStorage::WRITE);
+		f << "rgb_dif_far" << rgbDif;
+		f.release();
+	}
+	
+	cv::Mat templIn;
+	if (!f.isOpened())
+	{
+		f.open("rgb_dif_far.xml", FileStorage::READ);
+		f["rgb_dif_far"] >> templIn;
+		f.release();
+
+		// NEVER DRAW RECTANGLE ON THE IMAGE
+		double min, max;
+		minMaxLoc(templIn, &min, &max);
+		cv::Mat templIn_conv;
+		templIn.convertTo(templIn_conv, CV_8UC1, 255.0/max);
+		rectangle( templIn_conv, Point(275,200), Point(305, 230), Scalar::all(255), 2, 8, 0 );
+		imshow("rgb template far", templIn_conv);
+	}
+
+	if (!f.isOpened())
+	{
+		f.open("rgb_dif.xml", FileStorage::READ);
+		f["rgb_dif"] >> templIn;
+		f.release();
+
+		// NEVER DRAW RECTANGLE ON THE IMAGE
+		double min, max;
+		minMaxLoc(templIn, &min, &max);
+		cv::Mat templIn_conv;
+		templIn.convertTo(templIn_conv, CV_8UC1, 255.0/max);
+		rectangle( templIn_conv, Point(240,230), Point(300,290), Scalar::all(255), 2, 8, 0 );
+		imshow("rgb template close", templIn_conv);
 	}
 }
 
@@ -630,41 +939,41 @@ int main()
 	// init webcam
     if(!(capture = cvCaptureFromCAM(0)))	return -1;
 
-	calibResult = kinectCalibrator.load();
-	minCalibrationPoints = kinectCalibrator.numEntries();
-	calibResult = kinectCalibrator.calibrate();
-	//calibrated = true;
-	setReprojectionMatrix(calibResult);
+	//calibResult = kinectCalibrator.load();
+	//minCalibrationPoints = kinectCalibrator.numEntries();
+	//calibResult = kinectCalibrator.calibrate();
+	////calibrated = true;
+	//setReprojectionMatrix(calibResult);
 
 	// Preprocessing
 	templateMatchingPreprocessing();
 
 	// Prepare opencv windows
-	cvNamedWindow("original_image", CV_WINDOW_AUTOSIZE);
-	cvNamedWindow("depth_matching", CV_WINDOW_AUTOSIZE);
-	cvNamedWindow("rgb_matching", CV_WINDOW_AUTOSIZE);
-	cvNamedWindow("kinect_rgb_matching", CV_WINDOW_AUTOSIZE);
-	cvNamedWindow("depth_matching_double", CV_WINDOW_AUTOSIZE);
-	cvNamedWindow("rgb_matching_double", CV_WINDOW_AUTOSIZE);
-	cvNamedWindow("kinect_rgb_matching_double", CV_WINDOW_AUTOSIZE);
+	//cvNamedWindow("original_image", CV_WINDOW_AUTOSIZE);
+	//cvNamedWindow("depth_matching", CV_WINDOW_AUTOSIZE);
+	//cvNamedWindow("rgb_matching", CV_WINDOW_AUTOSIZE);
+	//cvNamedWindow("kinect_rgb_matching", CV_WINDOW_AUTOSIZE);
+	//cvNamedWindow("depth_matching_double", CV_WINDOW_AUTOSIZE);
+	//cvNamedWindow("rgb_matching_red", CV_WINDOW_AUTOSIZE);
+	//cvNamedWindow("kinect_rgb_matching_red", CV_WINDOW_AUTOSIZE);
 	
 	// Main loop
 	while (1) 
 	{
-		loop();
+		//loop();
+		test_loop2();
 
 		if ((cvWaitKey(10) & 255) == 27) break;
 	}
 
 	// Release the capture device and destroy windows
 	cvReleaseCapture(&capture);
-	cvDestroyWindow("original_image");
-	cvDestroyWindow("depth_matching");
-	cvDestroyWindow("rgb_matching");
-	cvDestroyWindow("kinect_rgb_matching");
-	cvDestroyWindow("depth_matching_double");
-	cvDestroyWindow("rgb_matching_double");
-	cvDestroyWindow("kinect_rgb_matching_double");
+	//cvDestroyWindow("original_image");
+	//cvDestroyWindow("depth_matching");
+	//cvDestroyWindow("rgb_matching");
+	//cvDestroyWindow("kinect_rgb_matching");
+	//cvDestroyWindow("rgb_matching_red");
+	//cvDestroyWindow("kinect_rgb_matching_red");
 
 	return 0;
 }
