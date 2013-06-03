@@ -272,9 +272,14 @@ cv::Mat convertToDisplay(cv::Mat inputImage)
 	
 	cv::minMaxLoc(inputImage, &min, &max);
 	inputImage.convertTo(inputImageConv, CV_8UC1, 255.0/max);
-	cv::cvtColor(inputImageConv, inputImageConv3, CV_GRAY2RGB, 3);
 
-	return inputImageConv3;
+	if (inputImageConv.channels() == 1)
+	{
+		cv::cvtColor(inputImageConv, inputImageConv3, CV_GRAY2RGB, 3);
+		return inputImageConv3;
+	}
+
+	return inputImageConv;
 }
 
 cv::Mat rescaleImage(cv::Mat inputImage)
@@ -557,7 +562,7 @@ void iterativeImprovementCalibration()
 	if (kinectCalibrator.numEntries() == minCalibrationPoints)
 	{
 		float error = 50;
-		while (error > 10)
+		while (error > 5)
 		{
 			calibResult = kinectCalibrator.calibrate();
 			setReprojectionMatrix(calibResult);
@@ -648,7 +653,8 @@ bool checkPoints(cv::Point a, cv::Point b, int threshold)
 {
 	float dist = sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
 
-	if (dist < threshold)	return false;
+	if (dist < threshold)	
+		return false;
 
 	return true;
 }
@@ -863,6 +869,17 @@ bool getDepthPointFromRGB(cv::Mat depthImg, USHORT * data, cv::Point rgbPoint, c
 	return false;
 }
 
+// Write an image to a file and place an X where the "point" indicates
+void writeToFile(cv::Mat inputImg, cv::Point point, string path)
+{
+	cv::Mat res = inputImg.clone();
+
+	line(res, Point(point.x - 20, point.y), Point(point.x + 20, point.y), Scalar(0, 255, 0), 2, 8, 0);
+	line(res, Point(point.x, point.y - 20), Point(point.x, point.y + 20), Scalar(0, 255, 0), 2, 8, 0);
+
+	imwrite(path, convertToDisplay(res));
+}
+
 void loop()
 {
 	USHORT data[width*height];// array containing the depth information of each pixel
@@ -957,6 +974,19 @@ void loop()
 				// all conditions have been met, add points to the calibrator
 				kinectCalibrator.add3DPoint(depthMatchingPoint.x, depthMatchingPoint.y, getDepthInMeters(data, depthMatchingPoint.x, depthMatchingPoint.y));
 				kinectCalibrator.addProjCam(rgbMatchingPoint.x, rgbMatchingPoint.y);
+
+				int no = kinectCalibrator.numEntries();
+				
+				char path[1024];
+			
+				sprintf_s(path, 1024, "debug_img\\original_depth_%d.jpg", no);
+				writeToFile(original_depth, depthMatchingPoint, path);
+
+				sprintf_s(path, 1024, "debug_img\\rgb_image_%d.jpg", no);
+				writeToFile(rgbImage, rgbMatchingPoint, path);
+
+				sprintf_s(path, 1024, "debug_img\\kinect_rgb_image_%d.jpg", no);
+				writeToFile(kinectRGBImage, kinectRGBMatchingPoint, path);
 			}
 
 			printf("Matching point: %d out of %d \n", kinectCalibrator.numEntries(), minCalibrationPoints);
@@ -979,11 +1009,11 @@ int main()
 	// init webcam
     if(!(capture = cvCaptureFromCAM(0)))	return -1;
 
-	calibResult = kinectCalibrator.load();
-	minCalibrationPoints = kinectCalibrator.numEntries();
-	calibResult = kinectCalibrator.calibrate();
-	calibrated = true;
-	setReprojectionMatrix(calibResult);
+	//calibResult = kinectCalibrator.load();
+	//minCalibrationPoints = kinectCalibrator.numEntries();
+	//calibResult = kinectCalibrator.calibrate();
+	//calibrated = true;
+	//setReprojectionMatrix(calibResult);
 
 	// Preprocessing
 	templateMatchingPreprocessing();
