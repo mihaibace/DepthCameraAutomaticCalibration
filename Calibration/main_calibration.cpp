@@ -359,8 +359,8 @@ bool depthTemplateMatching_32F(cv::Mat depthImage, cv::Mat depthTempl, double th
 		imshow(window_name, toShow);
 
 		// Scale the point to the resolution 640/480
-		depthMatchPoint->x *= 640/depthImage.cols; 
-		depthMatchPoint->y *= 480/depthImage.rows;
+		depthMatchPoint->x *= (float) 640.0/depthImage.cols; 
+		depthMatchPoint->y *= (float) 480.0/depthImage.rows;
 
 		if (max < threshold)	return false;
 	
@@ -416,8 +416,8 @@ bool rgbTemplateMatching_32F(cv::Mat rgbDifImage, cv::Mat rgbTempl, double thres
 		imshow(window_name, toShow);
 
 		// Scale the point to the resolution 640/480
-		rgbMatchPoint->x *= 640/rgbDifImage.cols; 
-		rgbMatchPoint->y *= 480/rgbDifImage.rows;
+		rgbMatchPoint->x *= (float) 640.0/rgbDifImage.cols; 
+		rgbMatchPoint->y *= (float) 480.0/rgbDifImage.rows;
 
 		if (max < threshold)	return false;
 
@@ -561,7 +561,7 @@ void iterativeImprovementCalibration()
 {
 	if (kinectCalibrator.numEntries() == minCalibrationPoints)
 	{
-		float error = 50;
+		float error = 200;
 		while (error > 5)
 		{
 			calibResult = kinectCalibrator.calibrate();
@@ -869,6 +869,23 @@ bool getDepthPointFromRGB(cv::Mat depthImg, USHORT * data, cv::Point rgbPoint, c
 	return false;
 }
 
+// Get the corresponding RGB Point based on the depth point
+bool getRGBPointFromDepth(cv::Mat rgbImg, cv::Point depthPoint, USHORT * data, cv::Point * newPoint)
+{
+	long x, y;
+	USHORT pixelDepth = getPackedDepth(data, depthPoint.x, depthPoint.y);
+	NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, depthPoint.x, depthPoint.y, pixelDepth, &x, &y);
+
+	if ((x > 0 && x < rgbImg.size().width) && (y > 0 && y < rgbImg.size().height))
+	{
+		newPoint->x = x;
+		newPoint->y = y;
+		return true;
+	}
+
+	return false;
+}
+
 // Write an image to a file and place an X where the "point" indicates
 void writeToFile(cv::Mat inputImg, cv::Point point, string path)
 {
@@ -942,7 +959,7 @@ void loop()
 		cv::Mat rgbFilteredImage = filterImageByColor(rgbImage, mask);
 	
 		// RGB filterig on kinect
-		cv::Scalar min_color2(38,100,100);
+		cv::Scalar min_color2(38,110,110);
 		mask = getColorMask(kinectRGBImage, 100, 100, "kinect rgb filtering", min_color2, &medianKinect);
 		cv::Mat kinectRGBFilteredImage = filterImageByColor(kinectRGBImage, mask);
 
@@ -965,7 +982,7 @@ void loop()
 		cv::pyrUp(kinectDepthFilteredImage, depthImg_double);
 
 		bool kinectRGBRes, kinectDepthRes, rgbRes;
-		Point kinectRGBMatchingPoint, depthMatchingPoint, rgbMatchingPoint, computedDepthMatchingPoint;
+		Point kinectRGBMatchingPoint, depthMatchingPoint, rgbMatchingPoint, computedDepthMatchingPoint, computedKinectRGBMatchingPoint;
 
 		// Try to find the image in the close region
 		kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif_red, kinect_rgb_template_2, 0.75, &kinectRGBMatchingPoint, "kinect_rgb_matching", cv::Point(medianKinect.x/2, medianKinect.y/2), cv::Size(s.width/2, s.height/2));		
@@ -977,7 +994,7 @@ void loop()
 		}
 		else
 		{
-			kinectDepthRes = depthTemplateMatching_32F(depthImg_double, kinect_depth_template_1, 0.8, &depthMatchingPoint, Scalar(0,255,0), "depth_matching", cv::Point(dMedian.x*2, dMedian.y*2), cv::Size(s.width*2, s.height*2));
+			kinectDepthRes = depthTemplateMatching_32F(depthImg_double, kinect_depth_template_1, 0.82, &depthMatchingPoint, Scalar(0,255,0), "depth_matching", cv::Point(dMedian.x*2, dMedian.y*2), cv::Size(s.width*2, s.height*2));
 			kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif, kinect_rgb_template_1, 0.75, &kinectRGBMatchingPoint, "kinect_rgb_matching", medianKinect, s);	
 			rgbRes = rgbTemplateMatching_32F(rgbDif, rgb_template_1, 0.75, &rgbMatchingPoint, "rgb_matching", medianWebcam, s);
 		}
@@ -985,10 +1002,12 @@ void loop()
 		if (kinectRGBRes == true && kinectDepthRes == true && rgbRes == true)
 		{
 			bool getP = getDepthPointFromRGB(original_depth, data, kinectRGBMatchingPoint, &computedDepthMatchingPoint);
-			if (getP)
+			bool getP_rgb = getRGBPointFromDepth(kinectRGBImage, depthMatchingPoint, data, &computedKinectRGBMatchingPoint);
+			if (getP && getP_rgb && getDistance(kinectRGBMatchingPoint, computedKinectRGBMatchingPoint) < 10)
 			{
 				// all conditions have been met, add points to the calibrator
-				kinectCalibrator.add3DPoint(depthMatchingPoint.x, depthMatchingPoint.y, getDepthInMeters(data, depthMatchingPoint.x, depthMatchingPoint.y));
+				//kinectCalibrator.add3DPoint(depthMatchingPoint.x, depthMatchingPoint.y, getDepthInMeters(data, depthMatchingPoint.x, depthMatchingPoint.y));
+				kinectCalibrator.add3DPoint(computedDepthMatchingPoint.x, computedDepthMatchingPoint.y, getDepthInMeters(data, computedDepthMatchingPoint.x, computedDepthMatchingPoint.y));
 				kinectCalibrator.addProjCam(rgbMatchingPoint.x, rgbMatchingPoint.y);
 
 				int no = kinectCalibrator.numEntries();
@@ -996,16 +1015,16 @@ void loop()
 				char path[1024];
 			
 				sprintf_s(path, 1024, "debug_img\\original_depth_%d.jpg", no);
-				writeToFile(original_depth, computedDepthMatchingPoint, depthMatchingPoint, path); // Green computed, red detected 
+				writeToFile(original_depth, depthMatchingPoint, computedDepthMatchingPoint, path); // Green detected, red computed
 
 				sprintf_s(path, 1024, "debug_img\\rgb_image_%d.jpg", no);
 				writeToFile(rgbImage, rgbMatchingPoint, path);
 
 				sprintf_s(path, 1024, "debug_img\\kinect_rgb_image_%d.jpg", no);
-				writeToFile(kinectRGBImage, kinectRGBMatchingPoint, path);
-			}
+				writeToFile(kinectRGBImage, kinectRGBMatchingPoint, computedKinectRGBMatchingPoint, path); // Green detected, red computed
 
-			printf("Matching point: %d out of %d \n", kinectCalibrator.numEntries(), minCalibrationPoints);
+				printf("Matching point: %d out of %d \n", kinectCalibrator.numEntries(), minCalibrationPoints);
+			}
 		}
 
 		frameCount = 1;
@@ -1025,11 +1044,11 @@ int main()
 	// init webcam
     if(!(capture = cvCaptureFromCAM(0)))	return -1;
 
-	//calibResult = kinectCalibrator.load();
-	//minCalibrationPoints = kinectCalibrator.numEntries();
-	//calibResult = kinectCalibrator.calibrate();
-	//calibrated = true;
-	//setReprojectionMatrix(calibResult);
+	calibResult = kinectCalibrator.load();
+	minCalibrationPoints = kinectCalibrator.numEntries();
+	calibResult = kinectCalibrator.calibrate();
+	calibrated = true;
+	setReprojectionMatrix(calibResult);
 
 	// Preprocessing
 	templateMatchingPreprocessing();
