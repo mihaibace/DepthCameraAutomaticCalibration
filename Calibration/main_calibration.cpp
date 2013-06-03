@@ -880,6 +880,22 @@ void writeToFile(cv::Mat inputImg, cv::Point point, string path)
 	imwrite(path, convertToDisplay(res));
 }
 
+// Write an image to a file and place an X where the detected position is and another X where it should be
+void writeToFile(cv::Mat inputImg, cv::Point point1, cv::Point point2, string path)
+{
+	cv::Mat res = convertToDisplay(inputImg);
+
+	// Green for first point
+	line(res, Point(point1.x - 20, point1.y), Point(point1.x + 20, point1.y), Scalar(0, 255, 0), 2, 8, 0);
+	line(res, Point(point1.x, point1.y - 20), Point(point1.x, point1.y + 20), Scalar(0, 255, 0), 2, 8, 0);
+
+	// Red is for secont point
+	line(res, Point(point2.x - 20, point2.y), Point(point2.x + 20, point2.y), Scalar(0, 0, 255), 2, 8, 0);
+	line(res, Point(point2.x, point2.y - 20), Point(point2.x, point2.y + 20), Scalar(0, 0, 255), 2, 8, 0);
+
+	imwrite(path, res);
+}
+
 void loop()
 {
 	USHORT data[width*height];// array containing the depth information of each pixel
@@ -949,7 +965,7 @@ void loop()
 		cv::pyrUp(kinectDepthFilteredImage, depthImg_double);
 
 		bool kinectRGBRes, kinectDepthRes, rgbRes;
-		Point kinectRGBMatchingPoint, depthMatchingPoint, rgbMatchingPoint;
+		Point kinectRGBMatchingPoint, depthMatchingPoint, rgbMatchingPoint, computedDepthMatchingPoint;
 
 		// Try to find the image in the close region
 		kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif_red, kinect_rgb_template_2, 0.75, &kinectRGBMatchingPoint, "kinect_rgb_matching", cv::Point(medianKinect.x/2, medianKinect.y/2), cv::Size(s.width/2, s.height/2));		
@@ -968,7 +984,7 @@ void loop()
 
 		if (kinectRGBRes == true && kinectDepthRes == true && rgbRes == true)
 		{
-			bool getP = getDepthPointFromRGB(original_depth, data, kinectRGBMatchingPoint, &depthMatchingPoint);
+			bool getP = getDepthPointFromRGB(original_depth, data, kinectRGBMatchingPoint, &computedDepthMatchingPoint);
 			if (getP)
 			{
 				// all conditions have been met, add points to the calibrator
@@ -980,7 +996,7 @@ void loop()
 				char path[1024];
 			
 				sprintf_s(path, 1024, "debug_img\\original_depth_%d.jpg", no);
-				writeToFile(original_depth, depthMatchingPoint, path);
+				writeToFile(original_depth, computedDepthMatchingPoint, depthMatchingPoint, path); // Green computed, red detected 
 
 				sprintf_s(path, 1024, "debug_img\\rgb_image_%d.jpg", no);
 				writeToFile(rgbImage, rgbMatchingPoint, path);
