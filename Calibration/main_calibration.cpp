@@ -24,6 +24,8 @@ using namespace cv;
 using namespace std;
 using namespace aptarism::vision;
 
+void debugDraw();
+
 namespace
 {
 	const int width = 640;
@@ -63,13 +65,6 @@ namespace
 
 	typedef std::vector<cv::Point2f> Point2DVector;
 	typedef std::vector<cv::Point3f> Point3DVector; 
-
-	// OpenGL Scene control variables
-	double rotate_y = 0; 
-	double rotate_x = 0;
-	double trans_x = 0;
-	double trans_y = 0;
-	double trans_z = 0;
 } // namespace
 
 // Capture a frame from the webcam
@@ -915,7 +910,7 @@ void writeToFile(cv::Mat inputImg, cv::Point point1, cv::Point point2, string pa
 	imwrite(path, res);
 }
 
-void drawKinectPointCloud(cv::Mat depthImage, USHORT * data, cv::Mat rgbImage);
+void draw(cv::Mat depthImage, USHORT * data, cv::Mat rgbImage);
 
 void loop()
 {
@@ -932,11 +927,12 @@ void loop()
 
 	// Get RGB data
 	cv::Mat image = getRGBCameraFrame();
+	//imshow("Original image", image);
 	cv::Mat rgbImage;
 	cv::flip(image, rgbImage, 1);
 
 	cv::Mat debugImg = debugProjections(rgbImage);
-	imshow("Webcam: RGB Image", debugImg);
+	//imshow("Webcam: RGB Image", debugImg);
 
 
 	// Calibrate 
@@ -949,10 +945,12 @@ void loop()
 	if (calibrated == true)
 	{
 		cv::Mat depthReconstr = getDepthColorReconstruction(original_depth, rgbImage, data);
-		imshow("depth reconstr", depthReconstr);
-		imshow("original depth", convertToDisplay(original_depth));
+		cv::Mat depthReconst_flipped;
+		cv::flip(depthReconstr, depthReconst_flipped, 1);
+		imshow("depth reconstr", depthReconst_flipped);
+		//imshow("original depth", convertToDisplay(original_depth));
 
-		drawKinectPointCloud(original_depth, data, rgbImage);
+		draw(original_depth, data, rgbImage);
 	}
 
 	// Template matching algorithm
@@ -1076,20 +1074,54 @@ cv::Mat changeDepth(cv::Mat depth)
 // OpenGL scene control
 // ----------------------------------------------------------
 
+//angle of rotation
+float xpos = 0, ypos = 2, zpos = -8, xrot = 0, yrot = 180;
+
+float lastx, lasty;
+
+void camera (void) 
+{
+    glRotatef(xrot,1.0,0.0,0.0);  //rotate our camera on teh x-axis (left and right)
+    glRotatef(yrot,0.0,1.0,0.0);  //rotate our camera on the y-axis (up and down)
+	glTranslated(-xpos,-ypos,-zpos); //translate the screen to the position of our camera
+}
+
+void reshape (int w, int h)
+{
+    glViewport (0, 0, (GLsizei)w, (GLsizei)h); //set the viewport to the current window specifications
+    glMatrixMode (GL_PROJECTION); //set the matrix to projection
+
+    glLoadIdentity ();
+    gluPerspective(60, (GLfloat)w / (GLfloat)h, 1, 20.0); //set the perspective (angle of sight, width\height, zNear, zFar)
+    glMatrixMode (GL_MODELVIEW); //set the matrix back to model
+}
+
 void specialKeys( int key, int x, int y ) 
 { 
 	switch (key)
 	{
-		case GLUT_KEY_RIGHT: rotate_y += 5;
+		case GLUT_KEY_RIGHT: 
+			yrot += 1;
+			if (yrot >360) 
+				yrot -= 360;
 			break;
 
-		case GLUT_KEY_LEFT: rotate_y -= 5;
+		case GLUT_KEY_LEFT:
+			yrot -= 1;
+			if (yrot < -360) 
+				yrot += 360;
 			break; 
 
-		case GLUT_KEY_UP: rotate_x -= 5;
+		case GLUT_KEY_DOWN: 
+			xrot += 1;
+			if (xrot >360) 
+				xrot -= 360;
 			break;
 
-		case GLUT_KEY_DOWN: rotate_x += 5;
+		case GLUT_KEY_UP:
+			xrot -= 1;
+			if (xrot < -360) 
+				xrot += 360;
 			break;
 
 		default: 
@@ -1100,95 +1132,110 @@ void specialKeys( int key, int x, int y )
 	glutPostRedisplay(); 
 }
 
-void keyboard(unsigned char key, int x, int y)
+void keyboard (unsigned char key, int x, int y) 
 {
-	GLdouble modelViewMatrix[16];
-	glGetDoublev(GL_MODELVIEW_MATRIX, modelViewMatrix); 
+	if (key=='q')
+    {
+		float xrotrad;
+		xrotrad = (xrot / 180 * 3.141592654f);
+		ypos += float(cos(xrotrad)) * 0.2;
+		zpos += float(sin(xrotrad)) * 0.2;
+    }
 
-	// x-axis: m0, m1, m2
-	// y-axis: m4, m5, m6
-	// z-axis: m8, m9, m10
+    if (key=='e')
+    {
+		float xrotrad;
+		xrotrad = (xrot / 180 * 3.141592654f);
+		ypos -= float(cos(xrotrad)) * 0.2;
+		zpos -= float(sin(xrotrad)) * 0.2;
+    }
 
-	float scalingFactor = 0.1;
-
-	switch(key)
+    if (key=='w')
 	{
-	case 'a': // Y Axis
-			trans_x += modelViewMatrix[0] * scalingFactor;
-			trans_y += modelViewMatrix[1] * scalingFactor;
-			trans_z += modelViewMatrix[2] * scalingFactor;
-		break;
-
-	case 'd': 
-			trans_x -= modelViewMatrix[0] * scalingFactor;
-			trans_y -= modelViewMatrix[1] * scalingFactor;
-			trans_z -= modelViewMatrix[2] * scalingFactor;
-		break;
-
-	case 'w': // X Axis
-			trans_x -= modelViewMatrix[4] * scalingFactor;
-			trans_y -= modelViewMatrix[5] * scalingFactor;
-			trans_z -= modelViewMatrix[6] * scalingFactor;
-		break;
-
-	case 's': 
-			trans_x += modelViewMatrix[4] * scalingFactor;
-			trans_y += modelViewMatrix[5] * scalingFactor;
-			trans_z += modelViewMatrix[6] * scalingFactor;
-		break;
-
-	case 'z': // Z Axis
-			trans_x -= modelViewMatrix[8] * scalingFactor;
-			trans_y -= modelViewMatrix[9] * scalingFactor;
-			trans_z -= modelViewMatrix[10] * scalingFactor;
-		break;
-
-	case 'x': 
-			trans_x += modelViewMatrix[8] * scalingFactor;
-			trans_y += modelViewMatrix[9] * scalingFactor;
-			trans_z += modelViewMatrix[10] * scalingFactor;
-		break;
-
-	default:
-		break;
+		float xrotrad, yrotrad;
+		yrotrad = (yrot / 180 * 3.141592654f);
+		xrotrad = (xrot / 180 * 3.141592654f); 
+		xpos += float(sin(yrotrad)) ;
+		zpos -= float(cos(yrotrad)) ;
+		ypos -= float(sin(xrotrad)) ; 
 	}
+	
+    if (key=='s')
+    {
+		float xrotrad, yrotrad;
+		yrotrad = (yrot / 180 * 3.141592654f);
+		xrotrad = (xrot / 180 * 3.141592654f); 
+		xpos -= float(sin(yrotrad));
+		zpos += float(cos(yrotrad)) ;
+		ypos += float(sin(xrotrad));
+    }
 
-	glutPostRedisplay();
+    if (key=='d')
+    {
+		float yrotrad;
+		yrotrad = (yrot / 180 * 3.141592654f);
+		xpos += float(cos(yrotrad)) * 0.2;
+		zpos += float(sin(yrotrad)) * 0.2;
+    }
+
+    if (key=='a')
+    {
+		float yrotrad;
+		yrotrad = (yrot / 180 * 3.141592654f);
+		xpos -= float(cos(yrotrad)) * 0.2;
+		zpos -= float(sin(yrotrad)) * 0.2;
+    }
+
+    if (key==27)
+    {
+		exit(0);
+    }
+
+	printf("xpos = %f, ypos = %f, zpos = %f, xrot = %f \n", xpos, ypos, zpos, xrot);
 }
+
+void mouseMovement(int x, int y) 
+{
+    int diffx=x-lastx; //check the difference between the current x and the last x position
+    int diffy=y-lasty; //check the difference between the current y and the last y position
+    lastx=x; //set lastx to the current x position
+    lasty=y; //set lasty to the current y position
+	if (diffx != x && diffy != y)
+    {
+		xrot += (float) diffy; //set the xrot to xrot with the addition of the difference in the y position
+		yrot += (float) diffx;    //set the xrot to yrot with the addition of the difference in the x position
+	}
+}
+
 
 bool init(int argc, char* argv[]) 
 {
 	// OpenGL init
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA);
-    glutInitWindowSize(width,height);
+    
+	glutInitWindowSize(width,height);
+	glutInitWindowPosition (0, 0);
+	
     glutCreateWindow("Kinect 3D Point Cloud");
+	
 	glutDisplayFunc(loop);
     glutIdleFunc(loop);
+	glutReshapeFunc (reshape);
+
+	//glutPassiveMotionFunc(mouseMovement); //check for mouse movement
+    glutKeyboardFunc (keyboard); 
 	glutSpecialFunc(specialKeys);
-	glutKeyboardFunc(keyboard);
+   
 	
 	return true;
 }
 
 void drawKinectPointCloud(cv::Mat depthImage, USHORT * data, cv::Mat rgbImage)
 {
-	//  Clear screen and Z-buffer
-	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+	glDisable(GL_CULL_FACE);
 
-	// Reset transformations
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
- 
-	// Rotate when user changes rotate_x and rotate_y
-	glRotatef( rotate_x, 1.0, 0.0, 0.0 );
-	glRotatef( rotate_y, 0.0, 1.0, 0.0 );
-
-	// Translate the image
-	glTranslatef(-trans_x, -trans_y, -trans_z);
-	
-	// Scale all the coordinates: for visualisation purposes
-	glScalef(0.2, 0.2, 0.2);     
+	cv::Mat depth_flipped, rgbImage_flipped;
 
 	// Display the points as a 3D point cloud
 	glBegin(GL_POINTS);
@@ -1226,9 +1273,19 @@ void drawKinectPointCloud(cv::Mat depthImage, USHORT * data, cv::Mat rgbImage)
 			}
 		}
 	glEnd();
+}
 
-	glFlush();
-	glutSwapBuffers();
+
+void draw(cv::Mat depthImage, USHORT * data, cv::Mat rgbImage)
+{
+	glClearColor (0.0,0.0,0.0,1.0); //clear the screen to black
+    glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); //clear the color buffer and the depth buffer
+    glLoadIdentity();  
+
+    camera();
+    drawKinectPointCloud(depthImage, data, rgbImage); // drawing function
+
+    glutSwapBuffers(); //swap the buffers
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
