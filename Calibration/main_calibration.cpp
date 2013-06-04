@@ -47,19 +47,15 @@ namespace
 
 
 	// Define minimum number of calibration points
-	unsigned minCalibrationPoints = 20;
+	unsigned minCalibrationPoints = 30;
 
 	// Template matching
-	cv::Mat rgbTemplate_1; // close
-	cv::Mat rgbTemplate_2; // far
-	cv::Mat depthTemplate_1; // close
-	cv::Mat depthTemplate_2; // far
-
 	cv::Mat rgb_template_1;
 	cv::Mat kinect_rgb_template_1;
 	cv::Mat kinect_depth_template_1;
 	cv::Mat rgb_template_2;
 	cv::Mat kinect_rgb_template_2;
+	cv::Mat kinect_depth_template_2;
 
 	// Frame skipping variable
 	int frameCount = 0;
@@ -68,6 +64,12 @@ namespace
 	typedef std::vector<cv::Point2f> Point2DVector;
 	typedef std::vector<cv::Point3f> Point3DVector; 
 
+	// OpenGL Scene control variables
+	double rotate_y = 0; 
+	double rotate_x = 0;
+	double trans_x = 0;
+	double trans_y = 0;
+	double trans_z = 0;
 } // namespace
 
 // Capture a frame from the webcam
@@ -137,7 +139,8 @@ void getKinectPackedDepthData(USHORT * dest)
 // Get Kinect unpacked depth data
 cv::Mat getDepthImageFromPackedData(USHORT * data)
 {
-	USHORT * data2 = (USHORT *) malloc(height * width * sizeof(USHORT));
+	cv::Mat result(height, width, CV_16SC1);
+	USHORT * data2 = result.ptr<USHORT>();
 	for (int y = 0; y < height; ++y)
 	{
 		for (int x = 0; x < width; ++x)
@@ -148,8 +151,6 @@ cv::Mat getDepthImageFromPackedData(USHORT * data)
 	}
 
 	cv::Mat result_float;
-
-	cv::Mat result(height, width, CV_16SC1, data2);
 	result.convertTo(result_float, CV_32FC1);
 	
 	// result is CV_32FC1
@@ -227,6 +228,19 @@ void templateMatchingPreprocessing()
 
 	cv::Rect templRect3(230, 202, 42, 42);
 	cv::Mat(templIn, templRect3).copyTo(kinect_depth_template_1);
+
+	// Kinect depth template 2 - try
+	if (!f.isOpened())
+	{
+		f.open("kdt2.xml", FileStorage::READ);
+		f["kdt2"] >> templIn;
+		f.release();
+	}
+
+	cv::Rect templRect4(198, 180, 60, 60);
+	//cv::Rect templRect4(208, 190, 40, 40);
+	cv::Mat(templIn, templRect4).copyTo(kinect_depth_template_2);
+
 }
 
 // Perform the gaussian blur difference on the rgb image (initially, the rgb image is CV_8UC3 - when grabbed from the webcam)
@@ -385,8 +399,7 @@ bool rgbTemplateMatching_32F(cv::Mat rgbDifImage, cv::Mat rgbTempl, double thres
 
 	int result_cols = rgbDifImage.cols - rgbTempl.cols + 1;
 	int result_rows = rgbDifImage.cols - rgbTempl.rows + 1;
-	cv::Mat result;
-	result.create(result_rows, result_cols, CV_32FC1);
+	cv::Mat result(result_rows, result_cols, CV_32FC1);
 
 	// match template only accepts images of type 8U or 32F
 	matchTemplate(rgbDifImage, rgbTempl, result, CV_TM_CCOEFF_NORMED);
@@ -499,7 +512,7 @@ cv::Mat getDepthColorReconstruction(cv::Mat depthImage, cv::Mat rgbImage, USHORT
 				// We have no depth information about this points (depth from kinect = 0)
 				for (int c = 0; c < 3; ++c) 
 				{
-					coloredDepth.ptr<uchar>(y)[x * 3 + c] = 255; 
+					coloredDepth.ptr<uchar>(y)[x * 3 + c] = 0; 
 				}
 			}
 		}
@@ -561,8 +574,8 @@ void iterativeImprovementCalibration()
 {
 	if (kinectCalibrator.numEntries() == minCalibrationPoints)
 	{
-		float error = 200;
-		while (error > 5)
+		float error = 10000;
+		while (error > 2)
 		{
 			calibResult = kinectCalibrator.calibrate();
 			setReprojectionMatrix(calibResult);
@@ -585,22 +598,11 @@ void iterativeImprovementCalibration()
 			error /= 2;
 		}
 		
-		kinectCalibrator.save();
+		//kinectCalibrator.save();
 		calibrated = true;
 	}
 }
 
-// Call calibrator
-void callCalibrator()
-{
-	if (kinectCalibrator.numEntries() == minCalibrationPoints)
-	{
-		calibResult = kinectCalibrator.calibrate();
-		setReprojectionMatrix(calibResult);
-		calibrated = true;
-		kinectCalibrator.save();
-	}
-}
 
 // Provide a debug way for the projections
 cv::Mat debugProjections(const cv::Mat rgbImage)
@@ -618,7 +620,7 @@ cv::Mat debugProjections(const cv::Mat rgbImage)
 		char * s; 
 		s = (char *) malloc (10 * sizeof(char));
 		sprintf_s(s, sizeof(s), "%d", i);
-		putText(rClone, s, Point(projections[i].x, projections[i].y), FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(0,0,0), 1, CV_AA);
+		putText(rClone, s, Point(projections[i].x, projections[i].y), FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(0,69,255), 1, CV_AA);
 		free(s);
 	}
 
@@ -913,6 +915,8 @@ void writeToFile(cv::Mat inputImg, cv::Point point1, cv::Point point2, string pa
 	imwrite(path, res);
 }
 
+void drawKinectPointCloud(cv::Mat depthImage, USHORT * data, cv::Mat rgbImage);
+
 void loop()
 {
 	USHORT data[width*height];// array containing the depth information of each pixel
@@ -934,6 +938,7 @@ void loop()
 	cv::Mat debugImg = debugProjections(rgbImage);
 	imshow("Webcam: RGB Image", debugImg);
 
+
 	// Calibrate 
 	if (kinectCalibrator.numEntries() == minCalibrationPoints && !calibrated)
 	{
@@ -945,6 +950,9 @@ void loop()
 	{
 		cv::Mat depthReconstr = getDepthColorReconstruction(original_depth, rgbImage, data);
 		imshow("depth reconstr", depthReconstr);
+		imshow("original depth", convertToDisplay(original_depth));
+
+		drawKinectPointCloud(original_depth, data, rgbImage);
 	}
 
 	// Template matching algorithm
@@ -982,11 +990,11 @@ void loop()
 		cv::pyrUp(kinectDepthFilteredImage, depthImg_double);
 
 		bool kinectRGBRes, kinectDepthRes, rgbRes;
-		Point kinectRGBMatchingPoint, depthMatchingPoint, rgbMatchingPoint, computedDepthMatchingPoint, computedKinectRGBMatchingPoint;
+		Point kinectRGBMatchingPoint, depthMatchingPoint, rgbMatchingPoint, computedDepthMatchingPoint, computedKinectRGBMatchingPoint_1,computedKinectRGBMatchingPoint_2;
 
 		// Try to find the image in the close region
 		kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif_red, kinect_rgb_template_2, 0.75, &kinectRGBMatchingPoint, "kinect_rgb_matching", cv::Point(medianKinect.x/2, medianKinect.y/2), cv::Size(s.width/2, s.height/2));		
-		kinectDepthRes = depthTemplateMatching_32F(kinectDepthFilteredImage, kinect_depth_template_1, 0.8, &depthMatchingPoint, Scalar(0,255,0), "depth_matching", dMedian, s);
+		kinectDepthRes = depthTemplateMatching_32F(kinectDepthFilteredImage, kinect_depth_template_2, 0.8, &depthMatchingPoint, Scalar(0,255,0), "depth_matching", dMedian, s);
 
 		if (kinectRGBRes == true && kinectDepthRes == true)
 		{
@@ -994,20 +1002,25 @@ void loop()
 		}
 		else
 		{
-			kinectDepthRes = depthTemplateMatching_32F(depthImg_double, kinect_depth_template_1, 0.82, &depthMatchingPoint, Scalar(0,255,0), "depth_matching", cv::Point(dMedian.x*2, dMedian.y*2), cv::Size(s.width*2, s.height*2));
+			kinectDepthRes = depthTemplateMatching_32F(depthImg_double, kinect_depth_template_2, 0.82, &depthMatchingPoint, Scalar(0,255,0), "depth_matching", cv::Point(dMedian.x*2, dMedian.y*2), cv::Size(s.width*2, s.height*2));
 			kinectRGBRes = rgbTemplateMatching_32F(kinectRGBDif, kinect_rgb_template_1, 0.75, &kinectRGBMatchingPoint, "kinect_rgb_matching", medianKinect, s);	
 			rgbRes = rgbTemplateMatching_32F(rgbDif, rgb_template_1, 0.75, &rgbMatchingPoint, "rgb_matching", medianWebcam, s);
 		}
 
 		if (kinectRGBRes == true && kinectDepthRes == true && rgbRes == true)
 		{
-			bool getP = getDepthPointFromRGB(original_depth, data, kinectRGBMatchingPoint, &computedDepthMatchingPoint);
-			bool getP_rgb = getRGBPointFromDepth(kinectRGBImage, depthMatchingPoint, data, &computedKinectRGBMatchingPoint);
-			if (getP && getP_rgb && getDistance(kinectRGBMatchingPoint, computedKinectRGBMatchingPoint) < 10)
+			bool getP = getDepthPointFromRGB(original_depth, data, kinectRGBMatchingPoint, &computedDepthMatchingPoint); // kinect rgb template result -> kinect depth (using calibration)
+			bool getP_rgb1 = getRGBPointFromDepth(kinectRGBImage, depthMatchingPoint, data, &computedKinectRGBMatchingPoint_1); // kinect depth template result -> kinect rgb (using calibration)
+			bool getP_rgb2 = getRGBPointFromDepth(kinectRGBImage, computedDepthMatchingPoint, data, &computedKinectRGBMatchingPoint_2);
+
+			cv::Point depthChoice;
+			float d1 = getDistance(kinectRGBMatchingPoint, computedKinectRGBMatchingPoint_1);
+			float d2 = getDistance(kinectRGBMatchingPoint, computedKinectRGBMatchingPoint_2);
+
+			if (getP && getP_rgb1 && (d1 < 8))
 			{
 				// all conditions have been met, add points to the calibrator
-				//kinectCalibrator.add3DPoint(depthMatchingPoint.x, depthMatchingPoint.y, getDepthInMeters(data, depthMatchingPoint.x, depthMatchingPoint.y));
-				kinectCalibrator.add3DPoint(computedDepthMatchingPoint.x, computedDepthMatchingPoint.y, getDepthInMeters(data, computedDepthMatchingPoint.x, computedDepthMatchingPoint.y));
+				kinectCalibrator.add3DPoint(depthMatchingPoint.x, depthMatchingPoint.y, getDepthInMeters(data, depthMatchingPoint.x, depthMatchingPoint.y));
 				kinectCalibrator.addProjCam(rgbMatchingPoint.x, rgbMatchingPoint.y);
 
 				int no = kinectCalibrator.numEntries();
@@ -1021,7 +1034,7 @@ void loop()
 				writeToFile(rgbImage, rgbMatchingPoint, path);
 
 				sprintf_s(path, 1024, "debug_img\\kinect_rgb_image_%d.jpg", no);
-				writeToFile(kinectRGBImage, kinectRGBMatchingPoint, computedKinectRGBMatchingPoint, path); // Green detected, red computed
+				writeToFile(kinectRGBImage, kinectRGBMatchingPoint, computedKinectRGBMatchingPoint_1, path); // Green detected, red computed
 
 				printf("Matching point: %d out of %d \n", kinectCalibrator.numEntries(), minCalibrationPoints);
 			}
@@ -1035,9 +1048,197 @@ void loop()
 	}
 }
 
-// Main 
-int main()
+cv::Mat changeDepth(cv::Mat depth)
 {
+	cv::Mat result = depth.clone();
+	int w = depth.size().width;
+	int h = depth.size().height;
+
+	for (int y=0; y<h; ++y)
+	{
+		for (int x=0; x<w; ++x)
+		{
+			float d = depth.ptr<float>(y)[x];
+
+			if (d > 1000 && d < 1700)
+				result.ptr<float>(y)[x] = (float) d - 1300;
+			else
+				result.ptr<float>(y)[x] = 0;
+		}
+	}
+
+	return result;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// ----------------------------------------------------------
+// OpenGL scene control
+// ----------------------------------------------------------
+
+void specialKeys( int key, int x, int y ) 
+{ 
+	switch (key)
+	{
+		case GLUT_KEY_RIGHT: rotate_y += 5;
+			break;
+
+		case GLUT_KEY_LEFT: rotate_y -= 5;
+			break; 
+
+		case GLUT_KEY_UP: rotate_x -= 5;
+			break;
+
+		case GLUT_KEY_DOWN: rotate_x += 5;
+			break;
+
+		default: 
+			break;
+	}
+ 
+	//  Request display update
+	glutPostRedisplay(); 
+}
+
+void keyboard(unsigned char key, int x, int y)
+{
+	GLdouble modelViewMatrix[16];
+	glGetDoublev(GL_MODELVIEW_MATRIX, modelViewMatrix); 
+
+	// x-axis: m0, m1, m2
+	// y-axis: m4, m5, m6
+	// z-axis: m8, m9, m10
+
+	float scalingFactor = 0.1;
+
+	switch(key)
+	{
+	case 'a': // Y Axis
+			trans_x += modelViewMatrix[0] * scalingFactor;
+			trans_y += modelViewMatrix[1] * scalingFactor;
+			trans_z += modelViewMatrix[2] * scalingFactor;
+		break;
+
+	case 'd': 
+			trans_x -= modelViewMatrix[0] * scalingFactor;
+			trans_y -= modelViewMatrix[1] * scalingFactor;
+			trans_z -= modelViewMatrix[2] * scalingFactor;
+		break;
+
+	case 'w': // X Axis
+			trans_x -= modelViewMatrix[4] * scalingFactor;
+			trans_y -= modelViewMatrix[5] * scalingFactor;
+			trans_z -= modelViewMatrix[6] * scalingFactor;
+		break;
+
+	case 's': 
+			trans_x += modelViewMatrix[4] * scalingFactor;
+			trans_y += modelViewMatrix[5] * scalingFactor;
+			trans_z += modelViewMatrix[6] * scalingFactor;
+		break;
+
+	case 'z': // Z Axis
+			trans_x -= modelViewMatrix[8] * scalingFactor;
+			trans_y -= modelViewMatrix[9] * scalingFactor;
+			trans_z -= modelViewMatrix[10] * scalingFactor;
+		break;
+
+	case 'x': 
+			trans_x += modelViewMatrix[8] * scalingFactor;
+			trans_y += modelViewMatrix[9] * scalingFactor;
+			trans_z += modelViewMatrix[10] * scalingFactor;
+		break;
+
+	default:
+		break;
+	}
+
+	glutPostRedisplay();
+}
+
+bool init(int argc, char* argv[]) 
+{
+	// OpenGL init
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA);
+    glutInitWindowSize(width,height);
+    glutCreateWindow("Kinect 3D Point Cloud");
+	glutDisplayFunc(loop);
+    glutIdleFunc(loop);
+	glutSpecialFunc(specialKeys);
+	glutKeyboardFunc(keyboard);
+	
+	return true;
+}
+
+void drawKinectPointCloud(cv::Mat depthImage, USHORT * data, cv::Mat rgbImage)
+{
+	//  Clear screen and Z-buffer
+	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+
+	// Reset transformations
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+ 
+	// Rotate when user changes rotate_x and rotate_y
+	glRotatef( rotate_x, 1.0, 0.0, 0.0 );
+	glRotatef( rotate_y, 0.0, 1.0, 0.0 );
+
+	// Translate the image
+	glTranslatef(-trans_x, -trans_y, -trans_z);
+	
+	// Scale all the coordinates: for visualisation purposes
+	glScalef(0.2, 0.2, 0.2);     
+
+	// Display the points as a 3D point cloud
+	glBegin(GL_POINTS);
+		for (int y = 0; y < height; ++y)
+		{
+			for (int x = 0; x < width; ++x)
+			{
+				int x_col, y_col;
+				double r[2];
+				float depthInM = getDepthInMeters(data, x, y);
+				float depthInMM = NuiDepthPixelToDepth(getPackedDepth(data,x,y));
+
+				// Get 3D coordinates from Depth Image Space
+				//Vector4 pointToDisplay = NuiTransformDepthImageToSkeleton(x, y, depthInMM);
+				Vector4 pointToDisplay = NuiTransformDepthImageToSkeleton(x, y, getPackedDepth(data,x,y));
+
+				if (depthInMM != 0)
+				{
+					reproject(aCalib,x,y,depthInM, r);
+					x_col = r[0];
+					y_col = r[1];
+
+					if ((x_col >= 0 && x_col < rgbImage.cols) && (y_col >= 0 && y_col < rgbImage.rows))
+					{
+						// take the color from x_col and y_col and project it in the depth image
+						int blue = (int) rgbImage.ptr<uchar>(y_col)[x_col * 3 + 0]; 
+						int green = (int) rgbImage.ptr<uchar>(y_col)[x_col * 3 + 1]; 
+						int red = (int) rgbImage.ptr<uchar>(y_col)[x_col * 3 + 2]; 
+						
+						// Vertex Color
+						glColor3f((float)red/255.0, (float)green/255.0, (float)blue/255.0);
+						glVertex3f(pointToDisplay.x, pointToDisplay.y, pointToDisplay.z);
+					}
+				}				
+			}
+		}
+	glEnd();
+
+	glFlush();
+	glutSwapBuffers();
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Main 
+int main(int argc, char* argv[])
+{
+	// init opengl
+	if (!init(argc, argv)) return 1;
+
 	// init Kinect
 	if (initKinect() != S_OK)	return -1;
 
@@ -1047,19 +1248,23 @@ int main()
 	calibResult = kinectCalibrator.load();
 	minCalibrationPoints = kinectCalibrator.numEntries();
 	calibResult = kinectCalibrator.calibrate();
-	calibrated = true;
+	//calibrated = true;
 	setReprojectionMatrix(calibResult);
 
 	// Preprocessing
 	templateMatchingPreprocessing();
 
 	// Main loop
-	while (1) 
-	{
-		loop();
+	//while (1) 
+	//{
+	//	loop();
 
-		if ((cvWaitKey(10) & 255) == 27) break;
-	}
+	//	//test_loop();
+
+	//	if ((cvWaitKey(10) & 255) == 27) break;
+	//}
+
+	glutMainLoop();
 
 	// Release the capture device and destroy windows
 	cvReleaseCapture(&capture);
