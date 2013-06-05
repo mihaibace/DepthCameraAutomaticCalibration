@@ -1,13 +1,18 @@
 \def\myname{Mihai $B\hat{a}ce$}
 
-\title{Depth Camera Calibration\\
+\title{Automatic Depth Camera Calibration\\
     \large Semester Project}
+    
 \author{
-Mihai Bace\\
-\tt{\emph{mihai.bace}@epfl.ch}
+  Mihai Bace \\
+  \texttt{mihai.bace@epfl.ch}
+  \and
+  {\emph Supervisor} Julien Pilet \\
+  \texttt{julien.pilet@aptarism.com}
 }
+
 \date{\today}
-\documentclass[a4paper,11pt]{book}
+\documentclass[a4paper,11pt]{report}
 \usepackage[utf8]{inputenc}
 \usepackage{graphicx}
 \usepackage{url}
@@ -26,5 +31,24 @@ Mihai Bace\\
   
 \begin{document}
 \maketitle
+
+\begin{abstract}
+The purpose of this report is to present a method in which a normal RGB camera can be calibrated using a 3D camera. The 3D camera used for calibration is a Microsoft Kinect which has depth detection capabilities using an infra-red sensor. Using the Kinect, this report will present an approach to calibrate the camera based on image processing techniques. 
+\end{abstract}
+
+\chapter{Introduction}
+\input{introduction.tex}
+
+\chapter{Design}
+\input{design.tex}
+
+\chapter{Implementation}
+\input{implementation.tex}
+
+\chapter{Visualization}
+\input{visualization.tex}
+
+\chapter{Results}
+\input{results.tex}
 
 \end{document}
