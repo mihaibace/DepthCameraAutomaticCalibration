@@ -988,15 +988,17 @@ void compareKinectCalibration(USHORT * data, vector<int> ids)
 	int size = kinectDepthImages.size();
 	Point2DVector projections = kinectCalibrator.projections();
 	Point3DVector points3D = kinectCalibrator.points3D();
+	Point2DVector reprojections = getReprojectedPoints(points3D, kinect_a_calib);
 
+	std::ofstream f;
+	f.open ("compare_output\\error.txt");
+	f << "Our Calibration" << "\t" << "Kinect's Calibration" << "\n";
 	for (unsigned i = 0; i<points3D.size(); i++)
 	{
 		cv::Point3f point3D(points3D.at(i).x, points3D.at(i).y, getDepthInMeters(data,points3D.at(i).x,points3D.at(i).y));
 
-		double r[2];
-		reproject(kinect_a_calib, point3D.x, point3D.y, point3D.z, r);
-		int x1 = r[0];
-		int y1 = r[1];
+		int x1 = reprojections.at(i).x;
+		int y1 = reprojections.at(i).y;
 
 		long x2, y2;
 		USHORT pixelDepth = getPackedDepth(data, point3D.x, point3D.y);
@@ -1023,7 +1025,18 @@ void compareKinectCalibration(USHORT * data, vector<int> ids)
 
 		sprintf_s(path, 1024, "compare_output\\rgb_image_%d.jpg", imgId);
 		writeToFile(kinectImage, cv::Point(x1,y1), cv::Point(x2,y2), path); // Green detected, red computed from Kinect
+
+		// compute the distance between P1-P3 and P2-P3
+		cv::Point2f P1(x1, y1);
+		cv::Point2f P2(x2, y2);
+		cv::Point2f P3(x3, y3);
+		float d1 = getDistance(P1, P3);
+		float d2 = getDistance(P2, P3);
+
+		f << d1 << "\t" << d2 << "\n";
 	}
+
+	f.close();
 }
 
 // Save the impages for the compare in a file

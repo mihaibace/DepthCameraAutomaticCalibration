@@ -27,6 +27,9 @@
 \usepackage[margin=1in]{geometry}
 \usepackage{caption}
 \usepackage{xcolor}
+\usepackage[section]{placeins}
+\usepackage{capt-of}
+\usepackage[toc,page]{appendix}
 
 \lstset{basicstyle=\ttfamily,
   mathescape=true,
@@ -39,8 +42,8 @@
 \tableofcontents
 
 \begin{abstract}
-
-The purpose of this report is to present a method in which a normal RGB camera can be calibrated using a 3D camera. The 3D camera used for calibration is a Microsoft Kinect which has depth detection capabilities using an infra-red sensor. Using the Kinect, this report will present an approach to calibrate a normal camera based on image processing techniques. The calibration approach is based on collecting a set of corresponding points from the Kinect depth image and the normal camera RGB image using a pattern. The pattern used in this report is a cone with a green colored tip. In order to detect the pattern, this report will describe techniques as color filtering, subtracting two consecutive Gaussian blurs and template matching. 
+\noindent
+The purpose of this report is to present a method in which we try to calibrate a 3D camera with respect to a conventional camera. The 3D camera used for calibration is a Microsoft Kinect which has depth detection capabilities using an infrared sensor. Using the Kinect, this report will present an approach to find the relationship between a 2D camera and a 3D camera using image processing techniques. The calibration approach is based on collecting a set of corresponding points from the Kinect depth image and the normal camera RGB image using a pattern. The pattern used in this report is a cone with a green colored tip. In order to detect the pattern, this report will describe techniques as color filtering, subtracting two consecutive Gaussian blurs and template matching. 
 \end{abstract}
 
 \chapter{Introduction}

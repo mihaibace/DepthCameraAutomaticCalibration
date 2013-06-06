@@ -7,7 +7,17 @@ The pattern that we want to detect is in the shape of a cone with its tip colore
 \\
 An image of the pattern can be seen below:
 
-$$ <Image of pattern> $$
+\begin{center}
+	\includegraphics[scale=0.1]{images/pattern_1.jpg}
+ 	\captionof{figure}{Small pattern}
+	\label{fig:small_pattern}
+\end{center}
+
+\begin{center}
+	\includegraphics[scale=0.15]{images/small_big_pattern.jpg}
+ 	\captionof{figure}{Small and big pattern - the big pattern extends the range of the detection}
+	\label{fig:small_big_pattern}
+\end{center}
 
 \noindent
 The algorithm that we describe in this report depends on the pattern that we have chosen. Similarly, it could be adapted in the future to work with different patterns, but we believe that the pattern that we have chosen is easy to build and it provides good results. 
@@ -15,8 +25,8 @@ The algorithm that we describe in this report depends on the pattern that we hav
 The steps for calibration are the following:
 \begin{enumerate}
 	\item Get the depth map from the Kinect
-	\item Get the RGB image from the Kinect
 	\item Get the RGB image from the webcam
+	\item Get the RGB image from the Kinect
 	\item Perform color filtering on the webcam RGB image
 	\item Perform color filtering on the Kinect RGB image
 	\item Perform filtering on the depth map based on the Kinect RGB color filtering 
@@ -26,8 +36,8 @@ The steps for calibration are the following:
 	\item Pattern detection: Do template matching on the webcam RGB image
 	\item Pattern detection: Do template matching on the Kinect RGB image
 	\item When all three templates have been matched, we have obtained a set of correspondences
-	\item Add the correspondences to the calibrator
-	\item Perform an iterative calibration and eliminate outliers
+	\item Collect correspondences
+	\item Minimization of reprojection error and outlier elimination
 	\item Display the Kinect depth map recolored from the webcam RGB image 	
 \end{enumerate}
 
@@ -37,23 +47,35 @@ One of the first steps in any image processing application is to get the images/
 \\
 For accuracy, the depth map will be stored exactly the way it is received from the Kinect. An example of such an image can be seen below. The completely black pixels show a depth of 0 millimeters. This means that the Kinect cannot obtain any depth information for those pixels. Points that are gray or close to black are the points that are close to the sensor, while points that are far away are white or closer to white. 
 
-$$ < depth image > $$
+\begin{center}
+	\includegraphics[scale=0.6]{images/original_depth.jpg}
+ 	\captionof{figure}{Depth image}
+	\label{fig:depth_image}
+\end{center}
 
-\section{Get the RGB image from the Kinect}
+\section{Get the RGB image from the webcam}
 \noindent
 Once the depth map has been obtained, we must obtain the RGB images from the Kinect and from the normal camera, the webcam. The image from the webcam is also captured frame by frame, it is an image of 640 x 480 pixels. Each point (pixel) stores information about the 3 channels, red, green and blue. 
 \\
 A sample of the image captured by the webcam can be seen below.
 
-$$ < RGB image > $$
+\begin{center}
+	\includegraphics[scale=0.4]{images/rgb_image.jpg}
+ 	\captionof{figure}{RGB Image}
+	\label{fig:rgb_image}
+\end{center}
 
-\section{Get the RGB image from the webcam}
+\section{Get the RGB image from the Kinect}
 \noindent
 Just like in the previous step, we must also get the RGB image from the Kinect's RGB camera. The process is the same as in the previous step, with a small difference that every point (pixel) stores 4 channels (BGRA), not 3 like in the previous case. 
 \\ 
 A sample of the image can be viewed below. 
 
-$$ < Kinect RGB Image > $$
+\begin{center}
+	\includegraphics[scale=0.4]{images/kinect_rgb_image.jpg}
+ 	\captionof{figure}{Kinect RGB Image}
+	\label{fig:kinect_rgb_image}
+\end{center}
 
 \section{Color filtering on the webcam RGB image}
 \noindent
@@ -71,12 +93,20 @@ The result of the \emph{inRange} function provided by the OpenCV is a matrix tha
 \\
 An image of the mask can be viewed below.
 
-$$ <image of mask> $$
+\begin{center}
+	\includegraphics[scale=0.6]{images/color_mask.jpg}
+ 	\captionof{figure}{Image of a mask}
+	\label{fig:color_mask}
+\end{center}
 
 \noindent
 An image of the RGB image filtered by this mask can be viewed below.
 
-$$ <image of mask> $$
+\begin{center}
+	\includegraphics[scale=0.8]{images/color_filtered_image.png}
+ 	\captionof{figure}{Color filtered image}
+	\label{fig:color_filter}
+\end{center}
 
 \noindent
 As we can observe, the accuracy of the color filtering is very good and the region of interest is exactly what we are looking for. The result of this step will be the input to the next step, where we will apply several times a Gaussian blur on the filtered image. 
@@ -116,24 +146,33 @@ Once this point has been found, we also apply a mask of 100 x 100 pixels and thi
 \\\\
 The region of interest after filtering can be seen below:
 
-$$ <filterRegionOfInterest> $$
+\begin{center}
+	\includegraphics[scale=0.8]{images/depth_filtered_image.png}
+ 	\captionof{figure}{Depth filtered image}
+	\label{fig:depth_filter}
+\end{center}
 
 \section{Apply Gaussian blur to the webcam RGB image}
 \noindent
-Once that we have found the region of interest for our pattern, we need to be able to detect it. The RGB image itself does not provide a lot of information, so we have to further process it. A good way in which we can identify the peak of a cone is by apply a Gaussian blur to the image, applying the Gaussian blur again and then performing the difference between the two images with Gaussian blur. Before applying the Gaussian blur we have to convert the image to gray scale.
+Once that we have found the region of interest for our pattern, we need to be able to detect it. The RGB image itself does not provide a lot of information, so we have to further process it. A good way in which we can identify the peak of a cone is to apply a Gaussian blur to the image, applying the Gaussian blur again and then performing the difference between the two images with Gaussian blur. Before applying the Gaussian blur we have to convert the image to gray scale.
 \\
 The Gaussian blur can be applied using the OpenCV function \emph{cv::GaussianBlur} and we need to specify the input image, the output image and the size of the kernel. 
 \\\\
 We first apply a Gaussian blur with a kernel size of 21 x 21 pixels. We then apply a Gaussian blur of 21 x 21 pixels. We subtract the two images and we obtain one image where we can observe the peak of the cone. We can notice that it represent a disc like shape with large values, representing a local maximum. Since we have already done color filtering, it is easy to observe that it is the only disc shaped maximum (white disc) in the image, more specifically in the region of interest.
 The result of this step can be seen in the image below.
 
-$$ <differenceBetweenTwoGaussianBlurs>$$
+\begin{center}
+	\includegraphics[scale=0.8]{images/gaussian_blur_difference.png}
+ 	\captionof{figure}{Difference between Gaussian blurs}
+	\label{fig:gauss_blur}
+\end{center}
 
+\noindent
 Another important aspect in this step is obtaining an output image as precise as possible. As a result, we first convert the input images which is {\bf CV\_8UC3} to gray scale and then to {\bf CV\_32FC1}. With floating point values we get much better precision and this will be useful for the next steps where we perform template matching to detect out pattern. 
 
 \section{Apply Gaussian blur to the Kinect RGB image}
 \noindent
-The process of apply a Gaussian blur to the Kinect RGB image is exactly the same as the one for the RGB image for the webcam. The only difference is the size of the second kernel for the second filtering. It is no longer a 21 x 21 pixels kernel, it is 35 x 35. The value for this kernel has been found empirically. 
+The process of applying a Gaussian blur to the Kinect RGB image is exactly the same as the one for the RGB image for the webcam. The only difference is the size of the second kernel for the second filtering. It is no longer a 21 x 21 pixels kernel, it is 35 x 35. The value for this kernel has been found empirically. 
 \\\\
 Just like in the previous case, for greater accuracy, the resulting image will be {\bf CV\_32FC1}.
 
@@ -141,7 +180,12 @@ Just like in the previous case, for greater accuracy, the resulting image will b
 \noindent
 Now that all the preprocessing has been done, we can perform template matching to find the pattern that we are looking for. In order to perform template matching we must first select a template. This is done manually and it is read from a file. The size of the template varies between 30 to 60 pixels, depending on the size of the pattern and the range we want to detect it in. 
 \\\\
-Template matching is done using OpenCV's function \emph{matchTemplate} and it takes as input the depth image, the template for the depth image and the way in which it will evaluate the result. In our project we have chosen \emph{CV\_TM\_CCOEFF\_NORMED}. This means that in the result of the template matching, the best match will be the point with the maximum value in the image. A value of 1 means a perfect match, while a value of 0 means that the area tested and the template are completely different. 
+Template matching is done using OpenCV's function \emph{matchTemplate} and it takes as input the depth image, the template for the depth image and the way in which it will evaluate the result. In our project we have chosen {\bf normalized cross-correlation} (\emph{CV\_TM\_CCOEFF\_NORMED}). 
+
+$$ R(x,y) = \frac{\sum\limits_{x',y'} (T'(x',y') \cdot I'(x+x', y+y'))}{\sqrt{\sum\limits_{x',y'} T'(x',y')^2 \cdot \sum\limits_{x',y'} I'(x+x', y+y')^2}}$$
+
+\noindent
+This means that in the result of the template matching, the best match will be the point with the maximum value in the image. A value of 1 means a perfect match, while a value of 0 means that the area tested and the template are completely different. 
 The template matching will return a point, the left top corner of the match (the template has a square shape). To determine the center of the area where the matching was best we just take the point returned by the template matching function and we add half the size of the width or height of the template. 
 
 $$ depthMatchPoint->x = matchLoc.x + depthTempl.cols/2 $$
@@ -171,11 +215,11 @@ $$ NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution $$
 \noindent
 and we provide as input the point returned by the depth template matching. The result will be a point $P(x, y)$ which corresponds to a point from the RGB image of the Kinect. We take the point returned from the RGB template matching from the Kinect and we calculate the Euclidean distance between them. If the distance is greater than a certain value (in practice this value is set to 8 pixels), the points are considered to be a bad match. Otherwise we consider the points to be valid and we will feed them to the calibrator. 
 
-\section{Add correspondences to the calibrator}
+\section{Collect correspondences}
 \noindent
 We now have successfully identified the patterns in all three images and we must calibrate the webcam. 
 \\\\
-The calibrator has been provided by Julien Pilet, one of the supervisor of this project. The calibration gathers a set of correspondences (a point from the RGB image from the webcam and a point from the depth map) and after enough points have been gathered we try to calibrate the camera. The result of the calibration will be a calibration matrix which can later be used to reproject any point from the depth image to the RGB image. 
+The calibrator has been provided by Julien Pilet, one of the supervisors of this project. The calibration gathers a set of correspondences (a point from the RGB image from the webcam and a point from the depth map) and after enough points have been gathered we try to calibrate the camera. The result of the calibration will be a calibration matrix which can later be used to reproject any point from the depth image to the RGB image. The calibrator tries to minimize the projection matrix A with a Gauss-Newton gradient descent algorithm, by minimizing the sum of the reprojection errors.
 \\\\
 However, it can happen that the points which have been identified as correct correspondences are actually outliers. A set of points are considered to be outliers if after we reproject the point, the Euclidean distance between the reprojected point and the detected point (from the RGB webcam image) is greater than a certain value. These outliers need to be eliminated because they make the calibration error to be large. 
 \\\\
@@ -185,7 +229,7 @@ In short, the calibrator is fed with the following points:
 	\item rgbWebcamMatchPoint: R(x,y) - a point which has been correctly identified using the template matching technique on the RGB image from the webcam. 
 \end{itemize}  
 
-\section{Iterative calibration and outliers elimination}
+\section{Minimization of reprojection error and outlier elimination}
 \noindent
 As mentioned in the previous case, the first try to calibrate the camera can lead to quite a large error (in practice this error can be between over 20 pixels). This error is large and it will not lead to a good calibration. In order to improve the calibration we must identify which of the points discovered are actually outliers and we need to eliminate them and recalibrate the cameras. 
 \\\\
@@ -210,4 +254,8 @@ With the calibration, we scan the depth map and we reproject each 3D point to ge
 \\
 The result of a depth color reconstruction looks like in the image below.
 
-$$ <depthColorReconstruction> $$   
+\begin{center}
+	\includegraphics[scale=0.8]{images/depth_reconstruction_1.png}
+ 	\captionof{figure}{Depth color reconstruction}
+	\label{fig:depth_reconstr}
+\end{center}   

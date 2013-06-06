@@ -25,34 +25,72 @@
 \@writefile{toc}{\contentsline {chapter}{\numberline {2}Design}{3}{chapter.2}}
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.1}{\ignorespaces Small pattern\relax }}{3}{figure.2.1}}
+\newlabel{fig:small_pattern}{{2.1}{3}{Small pattern\relax }{figure.2.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.2}{\ignorespaces Small and big pattern - the big pattern extends the range of the detection\relax }}{3}{figure.2.2}}
+\newlabel{fig:small_big_pattern}{{2.2}{3}{Small and big pattern - the big pattern extends the range of the detection\relax }{figure.2.2}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {2.1}Get the depth map from the Kinect}{4}{section.2.1}}
-\@writefile{toc}{\contentsline {section}{\numberline {2.2}Get the RGB image from the Kinect}{4}{section.2.2}}
-\@writefile{toc}{\contentsline {section}{\numberline {2.3}Get the RGB image from the webcam}{4}{section.2.3}}
-\@writefile{toc}{\contentsline {section}{\numberline {2.4}Color filtering on the webcam RGB image}{4}{section.2.4}}
-\@writefile{toc}{\contentsline {section}{\numberline {2.5}Color filtering on the Kinect RGB image}{5}{section.2.5}}
-\@writefile{toc}{\contentsline {section}{\numberline {2.6}Filtering on the depth map}{5}{section.2.6}}
-\@writefile{toc}{\contentsline {section}{\numberline {2.7}Apply Gaussian blur to the webcam RGB image}{6}{section.2.7}}
-\@writefile{toc}{\contentsline {section}{\numberline {2.8}Apply Gaussian blur to the Kinect RGB image}{7}{section.2.8}}
-\@writefile{toc}{\contentsline {section}{\numberline {2.9}Pattern detection: template matching on the depth image}{7}{section.2.9}}
-\@writefile{toc}{\contentsline {section}{\numberline {2.10}Pattern detection: template matching on the webcam RGB image and Kinect RGB Image}{7}{section.2.10}}
-\@writefile{toc}{\contentsline {section}{\numberline {2.11}Validation of template matching}{8}{section.2.11}}
-\@writefile{toc}{\contentsline {section}{\numberline {2.12}Add correspondences to the calibrator}{8}{section.2.12}}
-\@writefile{toc}{\contentsline {section}{\numberline {2.13}Iterative calibration and outliers elimination}{8}{section.2.13}}
-\@writefile{toc}{\contentsline {section}{\numberline {2.14}Depth color reconstruction based on the calibration}{9}{section.2.14}}
-\@writefile{toc}{\contentsline {chapter}{\numberline {3}Implementation}{10}{chapter.3}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.3}{\ignorespaces Depth image\relax }}{5}{figure.2.3}}
+\newlabel{fig:depth_image}{{2.3}{5}{Depth image\relax }{figure.2.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.2}Get the RGB image from the webcam}{5}{section.2.2}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.4}{\ignorespaces RGB Image\relax }}{5}{figure.2.4}}
+\newlabel{fig:rgb_image}{{2.4}{5}{RGB Image\relax }{figure.2.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.3}Get the RGB image from the Kinect}{6}{section.2.3}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.5}{\ignorespaces Kinect RGB Image\relax }}{6}{figure.2.5}}
+\newlabel{fig:kinect_rgb_image}{{2.5}{6}{Kinect RGB Image\relax }{figure.2.5}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.4}Color filtering on the webcam RGB image}{6}{section.2.4}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.6}{\ignorespaces Image of a mask\relax }}{7}{figure.2.6}}
+\newlabel{fig:color_mask}{{2.6}{7}{Image of a mask\relax }{figure.2.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.7}{\ignorespaces Color filtered image\relax }}{7}{figure.2.7}}
+\newlabel{fig:color_filter}{{2.7}{7}{Color filtered image\relax }{figure.2.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.5}Color filtering on the Kinect RGB image}{8}{section.2.5}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.6}Filtering on the depth map}{8}{section.2.6}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.8}{\ignorespaces Depth filtered image\relax }}{9}{figure.2.8}}
+\newlabel{fig:depth_filter}{{2.8}{9}{Depth filtered image\relax }{figure.2.8}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.7}Apply Gaussian blur to the webcam RGB image}{9}{section.2.7}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.9}{\ignorespaces Difference between Gaussian blurs\relax }}{10}{figure.2.9}}
+\newlabel{fig:gauss_blur}{{2.9}{10}{Difference between Gaussian blurs\relax }{figure.2.9}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.8}Apply Gaussian blur to the Kinect RGB image}{10}{section.2.8}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.9}Pattern detection: template matching on the depth image}{10}{section.2.9}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.10}Pattern detection: template matching on the webcam RGB image and Kinect RGB Image}{11}{section.2.10}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.11}Validation of template matching}{11}{section.2.11}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.12}Collect correspondences}{12}{section.2.12}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.13}Minimization of reprojection error and outlier elimination}{12}{section.2.13}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.14}Depth color reconstruction based on the calibration}{13}{section.2.14}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.10}{\ignorespaces Depth color reconstruction\relax }}{13}{figure.2.10}}
+\newlabel{fig:depth_reconstr}{{2.10}{13}{Depth color reconstruction\relax }{figure.2.10}{}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {3}Implementation}{14}{chapter.3}}
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\@writefile{toc}{\contentsline {section}{\numberline {3.1}Microsoft Kinect SDK}{10}{section.3.1}}
-\@writefile{toc}{\contentsline {section}{\numberline {3.2}Image Processing - OpenCV}{10}{section.3.2}}
-\@writefile{toc}{\contentsline {section}{\numberline {3.3}OpenGL}{12}{section.3.3}}
-\@writefile{toc}{\contentsline {chapter}{\numberline {4}Visualization and Results}{13}{chapter.4}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.1}Microsoft Kinect SDK}{14}{section.3.1}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.2}Image Processing - OpenCV}{14}{section.3.2}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.3}OpenGL}{16}{section.3.3}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {4}Visualization and Results}{17}{chapter.4}}
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\@writefile{toc}{\contentsline {section}{\numberline {4.1}Calibration and Visualization}{13}{section.4.1}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.1}3D point cloud scene control}{14}{subsection.4.1.1}}
-\@writefile{toc}{\contentsline {section}{\numberline {4.2}Results}{14}{section.4.2}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.1}Webcam calibration}{15}{subsection.4.2.1}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.2}Comparison the the Kinect calibration}{15}{subsection.4.2.2}}
+\@writefile{toc}{\contentsline {section}{\numberline {4.1}Calibration and Visualization}{17}{section.4.1}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.1}{\ignorespaces Calibration points\relax }}{18}{figure.4.1}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.2}{\ignorespaces Calibration console\relax }}{18}{figure.4.2}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.3}{\ignorespaces Valid Kinect depth matching\relax }}{19}{figure.4.3}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.4}{\ignorespaces Valid Kinect RGB matching\relax }}{19}{figure.4.4}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.5}{\ignorespaces Valid webcam RGB matching\relax }}{20}{figure.4.5}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.6}{\ignorespaces Depth color reconstruction\relax }}{20}{figure.4.6}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.7}{\ignorespaces Kinect 3D point cloud\relax }}{21}{figure.4.7}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.8}{\ignorespaces Kinect 3D point cloud\relax }}{21}{figure.4.8}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.9}{\ignorespaces Reprojection of the collected points\relax }}{22}{figure.4.9}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.1}3D point cloud scene control}{22}{subsection.4.1.1}}
+\@writefile{toc}{\contentsline {section}{\numberline {4.2}Results}{23}{section.4.2}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.1}Webcam calibration}{23}{subsection.4.2.1}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.10}{\ignorespaces Reprojection of the collected points\relax }}{23}{figure.4.10}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.2}Comparison the the Kinect calibration}{23}{subsection.4.2.2}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.11}{\ignorespaces Visualization of the reprojection error\relax }}{25}{figure.4.11}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.12}{\ignorespaces Reprojection of the collected points\relax }}{25}{figure.4.12}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.13}{\ignorespaces Reprojection of the collected points\relax }}{26}{figure.4.13}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.14}{\ignorespaces Reprojection of the collected points\relax }}{26}{figure.4.14}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.15}{\ignorespaces Reprojection of the collected points\relax }}{27}{figure.4.15}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.16}{\ignorespaces Reprojection of the collected points\relax }}{27}{figure.4.16}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.17}{\ignorespaces Reprojection of the collected points\relax }}{28}{figure.4.17}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.18}{\ignorespaces Reprojection of the collected points\relax }}{28}{figure.4.18}}
 \bibcite{a}{1}
 \bibcite{b}{2}
 \bibcite{c}{3}
@@ -60,4 +98,4 @@
 \bibcite{e}{5}
 \bibcite{f}{6}
 \bibcite{g}{7}
-\@writefile{toc}{\contentsline {chapter}{Bibliography}{16}{chapter*.2}}
+\@writefile{toc}{\contentsline {chapter}{Bibliography}{29}{chapter*.2}}
