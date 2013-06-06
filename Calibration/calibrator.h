@@ -5,6 +5,9 @@
 
 #include <vector>
 #include <map>
+#include <string>
+
+using std::string;
 
 namespace aptarism {
 namespace vision {
@@ -33,8 +36,8 @@ public:
   const Point3DVector& points3D() const { return points3D_; }
 
   cv::Mat calibrate() const;
-  void save() const;
-  cv::Mat load();
+  void save(string fileName) const;
+  cv::Mat load(string fileName);
   unsigned numEntries() const;
 
 private:

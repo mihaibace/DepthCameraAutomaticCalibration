@@ -1,6 +1,9 @@
 #include <Windows.h>
 #include <Ole2.h>
 
+#include <iostream>
+#include <fstream>
+
 #include <gl/GL.h>
 #include <gl/GLU.h>
 #include <gl/glut.h>
@@ -24,8 +27,6 @@ using namespace cv;
 using namespace std;
 using namespace aptarism::vision;
 
-void debugDraw();
-
 namespace
 {
 	const int width = 640;
@@ -42,14 +43,18 @@ namespace
 	CvCapture* capture;
 
 	// Calibrator 
+	Calibrator webcamCalibrator;
 	Calibrator kinectCalibrator;
-	cv::Mat calibResult;
-	double aCalib[12];
+	
+	cv::Mat webcam_calib_result;
+	cv::Mat kinect_calib_result;
 
-
+	double webcam_a_calib[12];
+	double kinect_a_calib[12];
 
 	// Define minimum number of calibration points
-	unsigned minCalibrationPoints = 30;
+	unsigned webcamMinCalibrationPoints = 30;
+	unsigned kinectMinCalibrationPoints = 30;
 
 	// Template matching
 	cv::Mat rgb_template_1;
@@ -61,10 +66,22 @@ namespace
 
 	// Frame skipping variable
 	int frameCount = 0;
-	bool calibrated = false;
+
+	bool webcamCalibrated = false;
+	bool kinectCalibrated = false;
 
 	typedef std::vector<cv::Point2f> Point2DVector;
 	typedef std::vector<cv::Point3f> Point3DVector; 
+
+	typedef std::vector<cv::Mat> MatVector;
+
+	// Store the images and the points
+	MatVector kinectDepthImages;
+	MatVector kinectRGBImages;
+	MatVector webcamRGBImages;
+
+	bool idsLoaded = false;
+	bool compared = false;
 } // namespace
 
 // Capture a frame from the webcam
@@ -482,7 +499,7 @@ cv::Mat getDepthColorReconstruction(cv::Mat depthImage, cv::Mat rgbImage, USHORT
 			
 			if (depthInM != 0)
 			{
-				reproject(aCalib, x, y, depthInM, r);
+				reproject(webcam_a_calib, x, y, depthInM, r);
 				x_col = r[0];
 				y_col = r[1];
 			
@@ -522,23 +539,24 @@ float getDistance(Point2f p1, Point2f p2)
 	return sqrt((p1.x-p2.x)*(p1.x-p2.x) + (p1.y-p2.y)*(p1.y-p2.y));
 }
 
-// Copy the result of a new calibration to aCalib - global var used for the reprojection
-void setReprojectionMatrix(cv::Mat calibMatrix)
+// Copy the result of a new calibration to webcam_a_calib - global var used for the reprojection
+void setReprojectionMatrix(cv::Mat calibMatrix, double * calib)
 {
 	for (unsigned i = 0; i<12; ++i)
 	{
-		aCalib[i] = calibMatrix.at<double>(i, 0);
+		calib[i] = calibMatrix.at<double>(i, 0);
 	}
 }
 
 // Get reprjected points
-Point2DVector getReprojectedPoints(Point3DVector points3D)
+Point2DVector getReprojectedPoints(Point3DVector points3D, double * a)
 {
 	Point2DVector reprojections;
+	reprojections.clear();
 	for (unsigned i=0; i<points3D.size(); ++i)
 	{
 		double r[2];
-		reproject(aCalib, points3D[i].x, points3D[i].y, points3D[i].z, r);
+		reproject(a, points3D[i].x, points3D[i].y, points3D[i].z, r);
 		int x = r[0];
 		int y = r[1];
 		reprojections.push_back(cv::Point2f(x, y));
@@ -548,8 +566,12 @@ Point2DVector getReprojectedPoints(Point3DVector points3D)
 }
 
 // Remove the points that are outliers
-void removeOutliers(Point2DVector * projections, Point3DVector * points3D, Point2DVector reprojections, float error, Point2DVector * newProjections, Point3DVector * newPoints3D)
+void removeOutliers(Point2DVector * projections, Point3DVector * points3D, Point2DVector reprojections, float error, vector<int> pointIds, Point2DVector * newProjections, Point3DVector * newPoints3D, vector<int> * newPointIds)
 {
+	newProjections->clear();
+	newPoints3D->clear();
+	newPointIds->clear();
+
 	for (unsigned i=0; i<projections->size(); ++i)
 	{
 		Point2f pProj = projections->at(i);
@@ -560,42 +582,98 @@ void removeOutliers(Point2DVector * projections, Point3DVector * points3D, Point
 			// add points from projections and from points3D
 			newProjections->push_back(projections->at(i));
 			newPoints3D->push_back(points3D->at(i));
+			newPointIds->push_back(pointIds.at(i));
 		}
 	}
 }
 
-// Iterative improvement of calibration by eliminating outliers
-void iterativeImprovementCalibration()
+// Create a new vector of ids
+vector<int> initPointIds(int size, bool loaded)
 {
-	if (kinectCalibrator.numEntries() == minCalibrationPoints)
+	vector<int> ids;
+
+	if (!loaded)
+	{
+		// initialize ids to i
+		for (int i=0; i<size; ++i)
+		{
+			int val = i;
+			ids.push_back(val);
+		}
+
+		return ids;
+	}
+	else
+	{
+		// read from file
+		std::ifstream f;
+		f.open("compare\\ids.txt");
+		if (f.is_open())
+		{
+			while (!f.eof())
+			{
+				int val;
+				f >> val;
+				ids.push_back(val);
+			}
+		}
+
+		f.close();
+
+		return ids;
+	}
+}
+
+void saveIds(vector<int> ids)
+{
+	std::ofstream f;
+	f.open ("compare\\ids.txt");
+	for (unsigned i = 0; i<ids.size(); ++i)
+	{
+		f << ids.at(i) << "\n";
+	}
+
+	f.close();
+}
+
+
+// Iterative improvement of calibration by eliminating outliers
+vector<int> iterativeImprovementCalibration(Calibrator * c, cv::Mat * calibResult, double * a, unsigned * minCalibPoints, string fileName, bool * calibrated, vector<int> ids)
+{
+	if (c->numEntries() == *minCalibPoints)
 	{
 		float error = 10000;
 		while (error > 2)
 		{
-			calibResult = kinectCalibrator.calibrate();
-			setReprojectionMatrix(calibResult);
+			// Webcam calibration
+			*calibResult = c->calibrate();
+			setReprojectionMatrix(*calibResult, a);
 
-			Point2DVector projections = kinectCalibrator.projections();
-			Point3DVector points3D = kinectCalibrator.points3D();
-			Point2DVector reprojections = getReprojectedPoints(points3D);
+			Point2DVector projections = c->projections();
+			Point3DVector points3D = c->points3D();
+			Point2DVector reprojections = getReprojectedPoints(points3D, a);
 
 			Point2DVector newProjections;
 			Point3DVector newPoints3D;
-			removeOutliers(&projections, &points3D, reprojections, error, &newProjections, &newPoints3D);
+			vector<int> newIds;
+			removeOutliers(&projections, &points3D, reprojections, error, ids, &newProjections, &newPoints3D, &newIds); 
 
-			kinectCalibrator.setProjections(newProjections);
-			kinectCalibrator.setPoints3D(newPoints3D);
-			minCalibrationPoints = newProjections.size();
+			ids = newIds;
+			c->setProjections(newProjections);
+			c->setPoints3D(newPoints3D);
+			*minCalibPoints = newProjections.size();
 
-			calibResult = kinectCalibrator.calibrate();
-			setReprojectionMatrix(calibResult);
+			*calibResult = c->calibrate();
+			setReprojectionMatrix(*calibResult, a);
 			
 			error /= 2;
 		}
 		
-		//kinectCalibrator.save();
-		calibrated = true;
+		c->save(fileName);
+		*calibrated = true;
 	}
+
+	return ids;
 }
 
 
@@ -604,32 +682,27 @@ cv::Mat debugProjections(const cv::Mat rgbImage)
 {
 	cv::Mat rClone = rgbImage.clone();
 
-	Point2DVector projections = kinectCalibrator.projections();
-	Point3DVector points3D = kinectCalibrator.points3D();
+	Point2DVector projections = webcamCalibrator.projections();
+	Point3DVector points3D = webcamCalibrator.points3D();
 
-	for (unsigned i = 0; i < kinectCalibrator.numEntries(); ++i) 
+	for (unsigned i = 0; i < webcamCalibrator.numEntries(); ++i) 
 	{
-		// Draw projection with greens
-		//line(rClone, Point(projections[i].x - 20, projections[i].y), Point(projections[i].x + 20, projections[i].y), Scalar(0, 255, 0), 1, 8, 0);
-		//line(rClone, Point(projections[i].x, projections[i].y - 20), Point(projections[i].x, projections[i].y + 20), Scalar(0, 255, 0), 1, 8, 0);
 		char * s; 
 		s = (char *) malloc (10 * sizeof(char));
 		sprintf_s(s, sizeof(s), "%d", i);
-		putText(rClone, s, Point(projections[i].x, projections[i].y), FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(0,69,255), 1, CV_AA);
+		putText(rClone, s, Point(projections[i].x, projections[i].y), FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(0,255,0), 1, CV_AA);
 		free(s);
 	}
 
-	if (kinectCalibrator.numEntries() >= minCalibrationPoints)
+	if (webcamCalibrator.numEntries() >= webcamMinCalibrationPoints)
 	{
-		for (unsigned i = 0; i < kinectCalibrator.numEntries(); ++i) 
+		for (unsigned i = 0; i < webcamCalibrator.numEntries(); ++i) 
 		{
 			// Draw reprojection with red
 			double r[2];
-			reproject(aCalib, points3D[i].x, points3D[i].y, points3D[i].z, r);
+			reproject(webcam_a_calib, points3D[i].x, points3D[i].y, points3D[i].z, r);
 			int x_col = r[0];
 			int y_col = r[1];
-			//line(rClone, Point(x_col - 14, y_col - 14), Point(x_col + 14, y_col + 14), Scalar(0, 0, 255), 1, 8, 0);
-			//line(rClone, Point(x_col - 14, y_col + 14), Point(x_col + 14, y_col - 14), Scalar(0, 0, 255), 2, 8, 0);
 
 			// Draw Connection between the points
 			line(rClone, Point(x_col, y_col), Point(projections[i].x, projections[i].y), Scalar(255, 0, 0), 1, 8, 0);
@@ -910,6 +983,87 @@ void writeToFile(cv::Mat inputImg, cv::Point point1, cv::Point point2, string pa
 	imwrite(path, res);
 }
 
+void compareKinectCalibration(USHORT * data, vector<int> ids)
+{
+	int size = kinectDepthImages.size();
+	Point2DVector projections = kinectCalibrator.projections();
+	Point3DVector points3D = kinectCalibrator.points3D();
+
+	for (unsigned i = 0; i<points3D.size(); i++)
+	{
+		cv::Point3f point3D(points3D.at(i).x, points3D.at(i).y, getDepthInMeters(data,points3D.at(i).x,points3D.at(i).y));
+
+		double r[2];
+		reproject(kinect_a_calib, point3D.x, point3D.y, point3D.z, r);
+		int x1 = r[0];
+		int y1 = r[1];
+
+		long x2, y2;
+		USHORT pixelDepth = getPackedDepth(data, point3D.x, point3D.y);
+		NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(NUI_IMAGE_RESOLUTION_640x480, NUI_IMAGE_RESOLUTION_640x480, &imageRGBFrame.ViewArea, point3D.x, point3D.y, pixelDepth, &x2, &y2);
+		
+		int imgId = ids.at(i);
+		cv::Mat depthImage = kinectDepthImages.at(imgId);
+		cv::Mat kinectImage = kinectRGBImages.at(imgId);
+
+		// Cross on depth image
+		line(depthImage, Point(point3D.x - 20, point3D.y), Point(point3D.x + 20, point3D.y), Scalar(0, 255, 0), 2, 8, 0);
+		line(depthImage, Point(point3D.x, point3D.y - 20), Point(point3D.x, point3D.y + 20), Scalar(0, 255, 0), 2, 8, 0);
+
+		int x3 = projections.at(i).x;
+		int y3 = projections.at(i).y;
+		// Blue cross on template matching
+		line(kinectImage, Point(x3 - 20, y3), Point(x3 + 20, y3), Scalar(255, 0, 0), 2, 8, 0);
+		line(kinectImage, Point(x3, y3 - 20), Point(x3, y3 + 20), Scalar(255, 0, 0), 2, 8, 0);
+
+		char path[1024];
+			
+		sprintf_s(path, 1024, "compare_output\\original_depth_%d.jpg", imgId);
+		writeToFile(depthImage, cv::Point(point3D.x, point3D.y), path); 
+
+		sprintf_s(path, 1024, "compare_output\\rgb_image_%d.jpg", imgId);
+		writeToFile(kinectImage, cv::Point(x1,y1), cv::Point(x2,y2), path); // Green detected, red computed from Kinect
+	}
+}
+
+// Save the impages for the compare in a file
+void saveCompareImages()
+{
+	char path[1024];
+
+	for (unsigned i=0; i<kinectDepthImages.size(); i++)
+	{
+		sprintf_s(path, 1024, "compare\\original_depth_%d.jpg", i);
+		imwrite(path, convertToDisplay(kinectDepthImages.at(i)));
+	}
+
+	for (unsigned i=0; i<kinectRGBImages.size(); i++)
+	{
+		sprintf_s(path, 1024, "compare\\rgb_image_%d.jpg", i);
+		imwrite(path, convertToDisplay(kinectRGBImages.at(i)));
+	}
+}
+
+// Load the images for the compare from a file
+void loadCompareImages(int size)
+{
+	char path[1024];
+
+	kinectDepthImages.clear();
+	kinectRGBImages.clear();
+
+	for (unsigned i=0; i<size; i++)
+	{
+		sprintf_s(path, 1024, "compare\\original_depth_%d.jpg", i);
+		cv::Mat img = imread(path);
+		kinectDepthImages.push_back(img);
+
+		sprintf_s(path, 1024, "compare\\rgb_image_%d.jpg", i);
+		cv::Mat img2 = imread(path);
+		kinectRGBImages.push_back(img2);
+	}
+}
+
 void draw(cv::Mat depthImage, USHORT * data, cv::Mat rgbImage);
 
 void loop()
@@ -932,17 +1086,29 @@ void loop()
 	cv::flip(image, rgbImage, 1);
 
 	cv::Mat debugImg = debugProjections(rgbImage);
-	//imshow("Webcam: RGB Image", debugImg);
+	imshow("Webcam: RGB Image", debugImg);
 
-
-	// Calibrate 
-	if (kinectCalibrator.numEntries() == minCalibrationPoints && !calibrated)
+	// Calibrate Webcam
+	if (webcamCalibrator.numEntries() == webcamMinCalibrationPoints && !webcamCalibrated)
 	{
-		iterativeImprovementCalibration();
+		vector<int> ids = initPointIds(webcamMinCalibrationPoints, false);
+		iterativeImprovementCalibration(&webcamCalibrator, &webcam_calib_result, webcam_a_calib, &webcamMinCalibrationPoints, "webcam_clicks.yml", &webcamCalibrated, ids);
+
+		// save images
+		saveCompareImages();
+	}
+
+	// Calibrate Kinect
+	vector<int> kinectIds; 	
+	if (kinectCalibrator.numEntries() == kinectMinCalibrationPoints && !kinectCalibrated)
+	{
+		vector<int> ids = initPointIds(kinectMinCalibrationPoints, idsLoaded);
+		kinectIds = iterativeImprovementCalibration(&kinectCalibrator, &kinect_calib_result, kinect_a_calib, &kinectMinCalibrationPoints, "kinect_clicks.yml", &kinectCalibrated, ids);
+		saveIds(kinectIds);
 	}
 
 	// Depth color reconstruction
-	if (calibrated == true)
+	if (webcamCalibrated == true)
 	{
 		cv::Mat depthReconstr = getDepthColorReconstruction(original_depth, rgbImage, data);
 		cv::Mat depthReconst_flipped;
@@ -950,11 +1116,19 @@ void loop()
 		imshow("depth reconstr", depthReconst_flipped);
 		//imshow("original depth", convertToDisplay(original_depth));
 
+		imwrite("report_img\\depth_reconstr.jpg", depthReconst_flipped);
+
 		draw(original_depth, data, rgbImage);
 	}
 
+	if (kinectCalibrated == true && compared == false)
+	{
+		compareKinectCalibration(data, kinectIds);
+		compared = true;
+	}
+
 	// Template matching algorithm
-	if (frameCount % 13 == 0)
+	if (frameCount % 13 == 0 && !webcamCalibrated)
 	{
 		Point medianWebcam, medianKinect;
 		cv::Size s(100,100);
@@ -1017,24 +1191,51 @@ void loop()
 
 			if (getP && getP_rgb1 && (d1 < 8))
 			{
-				// all conditions have been met, add points to the calibrator
-				kinectCalibrator.add3DPoint(depthMatchingPoint.x, depthMatchingPoint.y, getDepthInMeters(data, depthMatchingPoint.x, depthMatchingPoint.y));
-				kinectCalibrator.addProjCam(rgbMatchingPoint.x, rgbMatchingPoint.y);
+				// all conditions have been met, add points to the webcam calibrator
+				webcamCalibrator.add3DPoint(depthMatchingPoint.x, depthMatchingPoint.y, getDepthInMeters(data, depthMatchingPoint.x, depthMatchingPoint.y));
+				webcamCalibrator.addProjCam(rgbMatchingPoint.x, rgbMatchingPoint.y);
 
-				int no = kinectCalibrator.numEntries();
+				// add points to the kinect calibrator
+				kinectCalibrator.add3DPoint(depthMatchingPoint.x, depthMatchingPoint.y, getDepthInMeters(data, depthMatchingPoint.x, depthMatchingPoint.y));
+				kinectCalibrator.addProjCam(kinectRGBMatchingPoint.x, kinectRGBMatchingPoint.y);
+
+				// images that need to be saved: original_depth, rgbImage and kinectRGBImage
+				// need to store the images
+
+				// Debug images
+				int no = webcamCalibrator.numEntries();
+
+				if (no == 5)
+				{
+					imwrite("report_img\\original_depth.jpg", convertToDisplay(original_depth));
+					imwrite("report_img\\rgb_image.jpg", rgbImage);
+					imwrite("report_img\\kinect_rgb_image.jpg", kinectRGBImage);
+					imwrite("report_img\\color_mask.jpg", convertToDisplay(mask));
+					imwrite("report_img\\rgb_dif.jpg", convertToDisplay(rgbDif));
+					imwrite("report_img\\kinect_rgb_dif.jpg", convertToDisplay(kinectRGBDif));
+				}
 				
 				char path[1024];
 			
-				sprintf_s(path, 1024, "debug_img\\original_depth_%d.jpg", no);
+				sprintf_s(path, 1024, "debug_img\\original_depth_%d.jpg", (no-1));
 				writeToFile(original_depth, depthMatchingPoint, computedDepthMatchingPoint, path); // Green detected, red computed
 
-				sprintf_s(path, 1024, "debug_img\\rgb_image_%d.jpg", no);
+				sprintf_s(path, 1024, "debug_img\\rgb_image_%d.jpg", (no-1));
 				writeToFile(rgbImage, rgbMatchingPoint, path);
 
-				sprintf_s(path, 1024, "debug_img\\kinect_rgb_image_%d.jpg", no);
+				sprintf_s(path, 1024, "debug_img\\kinect_rgb_image_%d.jpg", (no-1));
 				writeToFile(kinectRGBImage, kinectRGBMatchingPoint, computedKinectRGBMatchingPoint_1, path); // Green detected, red computed
 
-				printf("Matching point: %d out of %d \n", kinectCalibrator.numEntries(), minCalibrationPoints);
+				// Images 
+				cv::Mat d;
+				original_depth.copyTo(d);
+				kinectDepthImages.push_back(d);
+
+				cv::Mat k;
+				kinectRGBImage.copyTo(k);
+				kinectRGBImages.push_back(k);
+
+				printf("Matching point: %d out of %d \n", webcamCalibrator.numEntries(), webcamMinCalibrationPoints);
 			}
 		}
 
@@ -1046,33 +1247,9 @@ void loop()
 	}
 }
 
-cv::Mat changeDepth(cv::Mat depth)
-{
-	cv::Mat result = depth.clone();
-	int w = depth.size().width;
-	int h = depth.size().height;
-
-	for (int y=0; y<h; ++y)
-	{
-		for (int x=0; x<w; ++x)
-		{
-			float d = depth.ptr<float>(y)[x];
-
-			if (d > 1000 && d < 1700)
-				result.ptr<float>(y)[x] = (float) d - 1300;
-			else
-				result.ptr<float>(y)[x] = 0;
-		}
-	}
-
-	return result;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// ----------------------------------------------------------
-// OpenGL scene control
-// ----------------------------------------------------------
+// --------------------------------------------------------------------------------------------------------------------
+// OpenGL 
+// --------------------------------------------------------------------------------------------------------------------
 
 //angle of rotation
 float xpos = 0, ypos = 2, zpos = -8, xrot = 0, yrot = 180;
@@ -1194,20 +1371,6 @@ void keyboard (unsigned char key, int x, int y)
 	printf("xpos = %f, ypos = %f, zpos = %f, xrot = %f \n", xpos, ypos, zpos, xrot);
 }
 
-void mouseMovement(int x, int y) 
-{
-    int diffx=x-lastx; //check the difference between the current x and the last x position
-    int diffy=y-lasty; //check the difference between the current y and the last y position
-    lastx=x; //set lastx to the current x position
-    lasty=y; //set lasty to the current y position
-	if (diffx != x && diffy != y)
-    {
-		xrot += (float) diffy; //set the xrot to xrot with the addition of the difference in the y position
-		yrot += (float) diffx;    //set the xrot to yrot with the addition of the difference in the x position
-	}
-}
-
-
 bool init(int argc, char* argv[]) 
 {
 	// OpenGL init
@@ -1223,10 +1386,8 @@ bool init(int argc, char* argv[])
     glutIdleFunc(loop);
 	glutReshapeFunc (reshape);
 
-	//glutPassiveMotionFunc(mouseMovement); //check for mouse movement
     glutKeyboardFunc (keyboard); 
 	glutSpecialFunc(specialKeys);
-   
 	
 	return true;
 }
@@ -1254,7 +1415,7 @@ void drawKinectPointCloud(cv::Mat depthImage, USHORT * data, cv::Mat rgbImage)
 
 				if (depthInMM != 0)
 				{
-					reproject(aCalib,x,y,depthInM, r);
+					reproject(webcam_a_calib,x,y,depthInM, r);
 					x_col = r[0];
 					y_col = r[1];
 
@@ -1302,24 +1463,25 @@ int main(int argc, char* argv[])
 	// init webcam
     if(!(capture = cvCaptureFromCAM(0)))	return -1;
 
-	calibResult = kinectCalibrator.load();
-	minCalibrationPoints = kinectCalibrator.numEntries();
-	calibResult = kinectCalibrator.calibrate();
-	//calibrated = true;
-	setReprojectionMatrix(calibResult);
+	// Webcam calibration
+	webcam_calib_result = webcamCalibrator.load("webcam_clicks.yml");
+	webcamMinCalibrationPoints = webcamCalibrator.numEntries();
+	webcam_calib_result = webcamCalibrator.calibrate();
+	//webcamCalibrated = true;
+	setReprojectionMatrix(webcam_calib_result, webcam_a_calib);
+
+	//// Kinect calibration
+	kinect_calib_result = kinectCalibrator.load("kinect_clicks.yml");
+	kinectMinCalibrationPoints = kinectCalibrator.numEntries();
+	kinect_calib_result = kinectCalibrator.calibrate();
+	//kinectCalibrated = true;
+	setReprojectionMatrix(kinect_calib_result, kinect_a_calib);
+	
+	loadCompareImages(30);
+	idsLoaded = true;
 
 	// Preprocessing
 	templateMatchingPreprocessing();
-
-	// Main loop
-	//while (1) 
-	//{
-	//	loop();
-
-	//	//test_loop();
-
-	//	if ((cvWaitKey(10) & 255) == 27) break;
-	//}
 
 	glutMainLoop();
 

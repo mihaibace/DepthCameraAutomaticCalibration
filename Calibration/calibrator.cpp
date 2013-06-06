@@ -2,9 +2,11 @@
 
 #include <assert.h>
 #include <algorithm>
+#include <string>
 #include <stdio.h>
 
 using std::vector;
+using std::string;
 
 namespace aptarism {
 namespace vision {
@@ -185,13 +187,13 @@ unsigned Calibrator::numEntries() const {
 	return std::min(projections_.size(), points3D_.size());
 }
 
-void Calibrator::save() const {
+void Calibrator::save(string fileName) const {
 	if (numEntries() == 0) {
 		return;
 	}
 
 	cv::Mat A = calibrate();
-    cv::FileStorage fs("calib_clicks.yml", cv::FileStorage::WRITE);
+    cv::FileStorage fs(fileName, cv::FileStorage::WRITE);
     fs << "features" << "[";
     for (unsigned int i = 0; i < numEntries(); ++i) {
         fs << "{:" << "px" << projections_[i].x << "py" << projections_[i].y
@@ -203,8 +205,8 @@ void Calibrator::save() const {
     fs.release();
 }
 
-cv::Mat Calibrator::load() {
-    cv::FileStorage fs("calib_clicks.yml", cv::FileStorage::READ);
+cv::Mat Calibrator::load(string fileName) {
+    cv::FileStorage fs(fileName, cv::FileStorage::READ);
 	if (!fs.isOpened()) {
 		return cv::Mat();
 	}

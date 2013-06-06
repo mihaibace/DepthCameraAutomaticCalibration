@@ -4,11 +4,14 @@
     \large Semester Project}
     
 \author{
-  Mihai Bace \\
+  {\emph Author:} Mihai Bace \\
   \texttt{mihai.bace@epfl.ch}
   \and
-  {\emph Supervisor} Julien Pilet \\
+  {\emph Supervisor:} Julien Pilet \\
   \texttt{julien.pilet@aptarism.com}
+  \and
+  {\emph Supervisor:} Vincent Lepetit \\
+  \texttt{vincent.lepetit@epfl.ch}
 }
 
 \date{\today}
@@ -23,6 +26,7 @@
 \usepackage{lstautogobble}
 \usepackage[margin=1in]{geometry}
 \usepackage{caption}
+\usepackage{xcolor}
 
 \lstset{basicstyle=\ttfamily,
   mathescape=true,
@@ -32,8 +36,11 @@
 \begin{document}
 \maketitle
 
+\tableofcontents
+
 \begin{abstract}
-The purpose of this report is to present a method in which a normal RGB camera can be calibrated using a 3D camera. The 3D camera used for calibration is a Microsoft Kinect which has depth detection capabilities using an infra-red sensor. Using the Kinect, this report will present an approach to calibrate the camera based on image processing techniques. 
+
+The purpose of this report is to present a method in which a normal RGB camera can be calibrated using a 3D camera. The 3D camera used for calibration is a Microsoft Kinect which has depth detection capabilities using an infra-red sensor. Using the Kinect, this report will present an approach to calibrate a normal camera based on image processing techniques. The calibration approach is based on collecting a set of corresponding points from the Kinect depth image and the normal camera RGB image using a pattern. The pattern used in this report is a cone with a green colored tip. In order to detect the pattern, this report will describe techniques as color filtering, subtracting two consecutive Gaussian blurs and template matching. 
 \end{abstract}
 
 \chapter{Introduction}
@@ -45,10 +52,9 @@ The purpose of this report is to present a method in which a normal RGB camera c
 \chapter{Implementation}
 \input{implementation.tex}
 
-\chapter{Visualization}
-\input{visualization.tex}
+\chapter{Visualization and Results}
+\input{visualization_results.tex}
 
-\chapter{Results}
-\input{results.tex}
+\input{references.tex}
 
 \end{document}

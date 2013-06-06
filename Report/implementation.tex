@@ -1,0 +1,57 @@
+\noindent
+This chapter will describe the technologies behind this project, the reason why we have chosen them and some of the most important functions in the implementation. 
+\\\\
+This project has been implemented in {\bf C++} using {\bf OpenCV, OpenGL and the Kinect SDK}. OpenCV has been used for the image processing part of the project, the Microsoft Kinect SDK has been used to obtain the data from the Kinect and OpenGL has been used to be able to produce a 3D point cloud of the depth map and recolored using the calibration. Based on this categorization, I will describe some of the most important functions from the implementation of this project. 
+
+\section{Microsoft Kinect SDK}
+\begin{itemize}
+	\item \textcolor{blue}{HRESULT initKinect()} - This function initializes the Kinect's sensor and opens the streams for both RGB image acquisition and depth image acquisition. 
+	\item \textcolor{blue}{void getKinectPackedDepthData(USHORT * dest)} - It returns an array of the size $width \times height$ (of the image) with the information captured from the Kinect's depth sensor. It is important to note that each value is not the value in millimeters, it is a Microsoft specific format. The depth information in millimeters can be extracted using the function \emph{NuiDepthPixelToDepth}.
+	\item \textcolor{blue}{cv::Mat getDepthImageFromPackedData(USHORT * data)} - Returns an array like in the previous function, but with the depth information in millimeters. 
+	\item \textcolor{blue}{void getKinectRGBData(BYTE * dest)}  - Returns an array with the RGB information from the Kinect. 
+	\item \textcolor{blue}{float getDepthInMeters(USHORT * data, int x, int y)} - Return the depth in meters of a specific pixel from the depth map. 
+\end{itemize} 
+
+\noindent
+As we can see, these functions are used for data acquisition. The arrays returned by these functions will be converted to OpenCV specific structures, \emph{cv::Mat}. 
+
+\section{Image Processing - OpenCV}
+
+\begin{itemize}
+	\item \textcolor{blue}{void loop()} - The main loop of the program. All the steps required for the processing and the display are put together here.  
+	\item \textcolor{blue}{cv::Mat getColorMask(cv::Mat inputImg, int w, int h, string window\_name, cv::Scalar min\_color, cv::Point * median)} - Returns a CV matrix which holds the color mask to filter an image. 
+	\item \textcolor{blue}{cv::Mat filterImageByColor(cv::Mat inputImg, cv::Mat maskImg)} - Returns the filtered image based on the mask obtained from the previous function. 
+	\item \textcolor{blue}{bool getDepthPointFromRGB(cv::Mat depthImg, USHORT * data, cv::Point rgbPoint, cv::Point * newPoint)} - Given a point from the RGB image it returns the equivalent point from the depth image based on Kinect's calibration. 
+	\item \textcolor{blue}{bool getRGBPointFromDepth(cv::Mat rgbImg, cv::Point depthPoint, USHORT * data, cv::Point * newPoint)} - It returns the RGB point from the Kinect's RGB image given as input a depth point from the depth map.
+	\item \textcolor{blue}{bool checkPoints(cv::Point a, cv::Point b, int threshold)} - Verifies if the Euclidean distance between two points is larger than a threshold. 
+	\item \textcolor{blue}{float getDistance(Point2f p1, Point2f p2)} - Return the Euclidean distance, measure in pixels, between two points. 
+	\item \textcolor{blue}{void removeOutliers(Point2DVector * projections, Point3DVector * points3D, Point2DVector reprojections, float error, vector<int> pointIds, Point2DVector * newProjections, Point3DVector * newPoints3D, vector<int> * newPointIds)} - This function removes the outliers which have a reprojection error bigger than the one in the input. 
+	\item \textcolor{blue}{vector$<int>$ iterativeImprovementCalibration(Calibrator * c, cv::Mat * calibResult, double * a, unsigned * minCalibPoints, string fileName, bool * calibrated, vector<int> ids)} - This function performs the iterative improvement calibration described in the Design chapter of this report. The result will be a calibration with only the points that give the best reprojection error. 
+	\item \textcolor{blue}{cv::Mat debugProjections(const cv::Mat rgbImage)} - It is a debug function that shows the collected points for the calibration and their reprojections. Ideally, if the points overlap the reprojection error is minimal. 
+	\item \textcolor{blue}{bool rgbTemplateMatching\_ 32F(cv::Mat rgbDifImage, cv::Mat rgbTempl, double threshold, Point * rgbMatchPoint, string window\_ name, cv::Point median, cv::Size s)} - This function performs template matching on the RGB image. It returns true if the template matching was successful and it also returns as an output parameter the center point where the template has matched. 
+	\item \textcolor{blue}{bool depthTemplateMatching\_32F(cv::Mat depthImage, cv::Mat depthTempl, double threshold, cv::Point * depthMatchPoint, cv::Scalar rectColor, string window\_name, cv::Point median, cv::Size s)} - Template matching on the depth image. The same as the above function, but applied on the depth map from the Kinect. 
+	\item \textcolor{blue}{cv::Mat getRGB\_GaussianBlurDifference\_32F(cv::Mat rgbImage, cv::Size s)} - This function does the difference between two consecutive Gaussian blurs applied on an RGB image. 
+	\item \textcolor{blue}{void templateMatchingPreprocessing()} - This function preloads the templates required for template matching. This is done only once, when the program starts. 
+	\item \textcolor{blue}{cv::Mat getDepthColorReconstruction(cv::Mat depthImage, cv::Mat rgbImage, USHORT * data)} - This function performs the visualization of the final result. It recolors the depth image based on the calibration from the webcam's RGB image. 
+	\item \textcolor{blue}{void reproject(const double a[12], double u, double v, double z, double * r) } - This function reprojects a 3D point to a 2D point from the RGB image screen based on the calibration that we have done. 
+\end{itemize}
+
+\noindent
+These are the most important functions for the processing part of this application.  
+
+\section{OpenGL}
+\noindent
+OpenGL is used only for visualization purposes. The functions that create the 3D point cloud and allow control over the 3D scene are presented below.
+
+\begin{itemize}
+	\item \textcolor{blue}{bool init(int argc, char* argv[]) } - Initialize the OpenGL environment. 
+	\item \textcolor{blue}{void draw(cv::Mat depthImage, USHORT * data, cv::Mat rgbImage)} - The draw function for the OpenGL 3D point cloud. 
+	\item \textcolor{blue}{void drawKinectPointCloud(cv::Mat depthImage, USHORT * data, cv::Mat rgbImage)} - Draw the points from the depth image of the Kinect using the color from the webcam's RGB image. 
+	\item \textcolor{blue}{void keyboard (unsigned char key, int x, int y) } - Provides scene control from the keyboard in the OpenGL environment.  
+	\item \textcolor{blue}{void specialKeys( int key, int x, int y ) } - Also provides scene controls from the keyboard using the arrows. 
+	\item \textcolor{blue}{void reshape (int w, int h)} - Reshape function that changes the perspective when the position of the camera changes. 
+	\item \textcolor{blue}{void camera (void) } - This function performs the rotation and the translation of the camera in order to allow movement in the 3D scene. 
+\end{itemize}
+
+\noindent
+Details about the control of the camera in the 3D scene are provided in the next chapter, Visualization. 
