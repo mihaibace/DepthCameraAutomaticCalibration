@@ -1065,7 +1065,7 @@ void loadCompareImages(int size)
 	kinectDepthImages.clear();
 	kinectRGBImages.clear();
 
-	for (unsigned i=0; i<size; i++)
+	for (int i=0; i<size; i++)
 	{
 		sprintf_s(path, 1024, "compare\\original_depth_%d.jpg", i);
 		cv::Mat img = imread(path);
